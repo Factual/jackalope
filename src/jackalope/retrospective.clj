@@ -1,5 +1,8 @@
 (ns jackalope.retrospective
-  (:require [hiccup.core :as hic]))
+  (:require [clojure.string :as str]
+            [hiccup.core :as hic]
+            [jackalope.core :as core]
+            [jackalope.persist :as prst]))
 
 (defn closed? [i]
   (= "closed" (:state i)))
@@ -16,12 +19,13 @@
 (defn maybe? [i]
   (= :maybe (:do? i)))
 
-(defn +do?-from-plan
-  "Returns issues with :do? added in from plan"
-  [plan issues]
-  (let [idx (into {} (map (juxt :number :do?) plan))]
-    (for [{:keys [number] :as i} issues]
-      (assoc i :do? (get idx number)))))
+(defn number->do?-ndx
+  "Returns an index (as a hash-map) of issue number to :do?"
+  [plan]
+  (into {} (map (juxt :number :do?) plan)))
+
+(defn +do? [i ndx]
+  (assoc i :do? (get ndx (:number i))))
 
 (defn outcome
   "Determines which outcome applies to issue.
@@ -41,8 +45,8 @@
    (and (closed? issue) (yes? issue))     :done-as-planned
    (and (closed? issue) (maybe? issue))   :done-as-maybe
    (and (open? issue) (maybe? issue))     :not-done-maybe
-   (or (nil? (:do? issue))
-       (and (closed? issue) (no? issue))) :late-add
+   (and (nil? (:do? issue))
+        (closed? issue))                  :late-add
    (and (open? issue) (no? issue))        :skipped-as-no
    (and (open? issue) (yes? issue))       :incomplete
    :else :inscrutable))
@@ -66,46 +70,51 @@
    :issues must be an up-to-date collection of all issues currently associated
    to the milestone. this is the issue data that will be compared against the
    plan to determine outcome."
-  [{:keys [plan issues]}]
-  (->> issues
-       (+do?-from-plan plan)
-       (map +outcome)
-       (group-by :outcome)))
+  [plan issues]
+  (let [ndx (number->do?-ndx plan)
+        issues (map #(+do? % ndx) issues)]
+    (->> issues
+         (map +outcome)
+         (group-by :outcome))))
+
+(defn issues-url [sample-issue]
+  (str/join "/"
+            (-> sample-issue
+                :html_url
+                (str/split #"/")
+                butlast)))
 
 (defn table
-  "issues-url is used to constructe the specific issue link. should be like:
-   http://github.com/some_user/some_repo/issues/"
-  [issues issues-url]
+  [issues]
   (list
    [:table
     {:style "border: 0; width: 90%"}
     [:tr {:align "left"} [:th "#"] [:th "assignee"] [:th "title"] [:th "milestone"]]
-    (for [i (sort-by #(get-in % [:assignee :login]) issues)]
-      [:tr
-       [:td
-        [:a
-         {:href
-          (str issues-url (:number i))}
-         (:number i)]]
-       [:td (get-in i [:assignee :login])]
-       [:td (:title i)]
-       [:td (get-in i [:milestone :title])]])]))
+    (let [issues-url (issues-url (first issues))]
+      (for [i (sort-by #(get-in % [:assignee :login]) issues)]
+        [:tr
+         [:td
+          [:a
+           {:href
+            (str issues-url "/" (:number i))}
+           (:number i)]]
+         [:td (get-in i [:assignee :login])]
+         [:td (:title i)]
+         [:td (get-in i [:milestone :title])]]))]))
 
-(defn section-hic [issues heading issues-url]
+(defn section-hic [issues heading]
   (when (not (empty? issues))
     (list
      [:h2 heading]
      [:p]
-     (table issues issues-url)
+     (table issues)
      [:p])))
 
 (def OUTCOMES
-  [[:done-as-planned "Completed As Planned Yes"]
-   [:done-as-maybe   "Completed As Planned Maybe"]
-   [:late-add        "Completed As Late Add"]
-   [:not-done-maybe  "Maybes Left Undone"]
-   [:skipped-as-no   "Skipped as No"]
-   [:incomplete      "Incomplete"]])
+  [[:done-as-planned "Completed Planned Yes"]
+   [:done-as-maybe   "Completed Planned Maybe"]
+   [:late-add        "Completed Unplanned (Late Adds)"]
+   [:incomplete      "Incomplete Planned Yes"]])
 
 (defn counts-hic [retro]
   [:table
@@ -115,10 +124,10 @@
    [:tr
     [:td "Total"] [:td (reduce + (map (comp count second) retro))]]])
 
-(defn report-hic [retro issues-url]
+(defn report-hic [retro]
   (list
    (for [[outcome heading] OUTCOMES]
-     (section-hic (outcome retro) heading issues-url))
+     (section-hic (outcome retro) heading))
    [:hr]
    [:h2 "Summary"]
    (counts-hic retro)))
@@ -129,5 +138,17 @@
    E.g., the result of calling (retrospective ...).
 
    Returns an HTML representation of the retrospective report"
-  [retro issues-url]
-  (hic/html (report-hic retro issues-url)))
+  [retro]
+  (hic/html (report-hic retro)))
+
+(defn make-retrospective-file [retro ms-title]
+  (let [f (str ms-title ".retrospective.html")]
+    (spit f (report-html retro))
+    f))
+
+(defn generate-report [ms-num ms-title]
+  (let [plan   (prst/read-plan-from-edn (str ms-title ".plan.edn"))
+        issues (core/fetch-all-issues ms-num plan)
+        retro  (retrospective plan issues)]
+    (make-retrospective-file retro ms-title)
+    {:issues issues}))

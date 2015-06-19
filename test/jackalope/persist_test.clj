@@ -22,4 +22,10 @@
   (is (= :inscrutable (normalize-decision-text nil)))
   (is (= :inscrutable (normalize-decision-text "")))
   (is (= :inscrutable (normalize-decision-text "      ")))
-  (is (= :inscrutable (normalize-decision-text "unicorn"))))
+  (is (= :inscrutable (normalize-decision-text "unicorn")))
+  (is (= :inscrutable (normalize-decision-text :inscrutable)))
+
+  (is (= :yes (normalize-decision-text :yes)))
+  (is (= :no (normalize-decision-text :NO)))
+  (is (= :maybe (normalize-decision-text :May)))
+  )
