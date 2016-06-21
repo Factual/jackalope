@@ -1,8 +1,6 @@
 (ns jackalope.retrospective
   (:require [clojure.string :as str]
-            [hiccup.core :as hic]
-            [jackalope.core :as core]
-            [jackalope.persist :as prst]))
+            [hiccup.core :as hic]))
 
 (defn closed? [i]
   (= "closed" (:state i)))
@@ -146,9 +144,6 @@
     (spit f (report-html retro))
     f))
 
-(defn generate-report [ms-num ms-title]
-  (let [plan   (prst/read-plan-from-edn (str ms-title ".plan.edn"))
-        issues (core/fetch-all-issues ms-num plan)
-        retro  (retrospective plan issues)]
-    (make-retrospective-file retro ms-title)
-    {:issues issues}))
+(defn generate-report [plan issues ms-title]
+  (let [retro  (retrospective plan issues)]
+    (make-retrospective-file retro ms-title)))
