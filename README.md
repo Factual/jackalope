@@ -44,7 +44,7 @@ The following example assumes:
 * you have a valid `github-prod.edn` file in the current working directory
 * you've just finished planning a sprint, which you've named "1.2.3"
 * the sprint  for 1.2.3 is represented by milestone id 1 in Github
-* you have "1.2.3.plan.json" in the current working directory.
+* you have "1.2.3.plan.json" file in the current working directory.
 * the milestone for the future release (e.g., 1.2.4) is milestone id 2 in Github
 
 ```bash
@@ -99,3 +99,29 @@ jackalope.core=> (def ACTS (sweep-milestone 1 2))
 jackalope.core=> (doseq [a ACTS] (println a)) ; preview the sweep
 jackalope.core=> (sweep! ACTS)
 ```
+
+### Generate a retrospective report
+
+This workflow sweeps a specified milestone:
+* clears 'maybe' labels from the issues in the current milestone
+* rolls forward incomplete (non closed) issues from the current mileston to the next milestone
+
+This workflow requires:
+* 2 milestones in github: one milestone that is the current mileston (the milestone to be swept), and one milestone that represents the next (future) sprint (the milestone to roll forward non-closed tickets into).
+
+__Example REPL session:__
+
+The following example assumes:
+* you have a valid `github-prod.edn` file in the current working directory
+* there is a milestone with id 1, from which you wish to see a retrospective
+* you have "1.2.3.plan.edn" file in the current working directory (probably generated from the _"Import and finalize a plan"_ workflow, above)
+
+```bash
+$ lein repl
+user=> (load "jackalope/core")
+user=> (in-ns 'jackalope.core)
+jackalope.core=> (github!)
+jackalope.core=> (generate-retrospective-report 1 "1.2.3")
+```
+
+This will result in a retrospective report that compares the plan for release "1.2.3" with the state of the issues in milestone id 1. The report will be formatted as HTML and saved in the file, `./1.2.3.retrospective.html`
