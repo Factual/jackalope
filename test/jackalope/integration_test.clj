@@ -155,6 +155,34 @@
       (is (= MILESTONE-A (get-in c [:milestone :number]))))))
 
 
+;
+; Conveniences for manual REPL-based testing
+;
+
+(defn setup-a-plan
+  "Creates new issues in milestone A then runs an example plan on them.
+   Current milestone is set as milestone A, next milestone is set as milestone B.
+
+   Creates these issues for testing:
+   (A) an issue planned as 'yes'; should stay in milestone A
+   (B) an issue planned as 'no'; should be moved to milestone B
+   (C) an issue planned as 'maybe'; should stay in milestone A and get maybe label
+
+   Returns:
+   {:issues [the 3 test issues, A, B, C]
+    :plan   [the plan structure]}"
+  []
+  (github! CONF)
+
+  ;; Create issues A, B, and C and create a plan for them
+  (let [[a b c] (create-test-issues 3 MILESTONE-A)
+        plan (a-plan a b c)]
+    {:issues [a b c]
+     :plan plan}))
+
+
+
+
 
 ;;
 ;; Firefly is an American space western science fiction drama

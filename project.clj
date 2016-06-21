@@ -1,5 +1,5 @@
-(defproject jackalope "0.0.1"
-  :description "Github integration service to support custom release planning processes"
+(defproject jackalope "0.0.2"
+  :description "An opinionated approach to spry software development using github."
   :url "https://github.com/Factual/jackalope"
   :scm {:name "git"
         :url "https://github.com/Factual/jackalope"}

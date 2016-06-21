@@ -129,15 +129,15 @@
   ;; ms-curr is only used right now as "the new milestone to move 'yes' issues
   ;; to and then consider active for the sprint"
   (let [{:keys [maybes edits] :as eds} (edits-from plan ms-curr ms-next)
-        conn (github-conn)
-        edited (doall (for [e edits] (github/edit-issue conn e)))
-        maybes (doall (for [n (map :number maybes)]
-                         (github/add-a-label conn n :maybe)))]
-    {:edited edited
+        conn (github-conn)]
+    (doall (for [e edits] (github/edit-issue conn e)))
+    (doall (for [n (map :number maybes)]
+             (github/add-a-label conn n :maybe)))
+    {:edits edits
      :maybes maybes}))
 
 (defn sweep-milestone
-  "Given the current milestone id ms-curr and the next milestone number ms-next,
+  "Given the current milestone id ms-curr and the next milestone id ms-next,
    returns action descriptions that will treat ms-curr as done and 'sweep'
    it into ms-next. The actions are not performed; this function only
    *describes* the actions as a proposal. (The sweep! function will perform the 
@@ -145,7 +145,7 @@
 
    The actions described will:
    1) clear 'maybe' labels from the issues in milestone ms-curr
-   2) roll forward incomplete (non closed) issues from ms-curre to ms-next
+   2) roll forward incomplete (non closed) issues from ms-curr to ms-next
 
    ms-curr should be the milestone number for the milestone to sweep. i.e., the 
    milestone that is being closed.
@@ -203,7 +203,7 @@
 (comment 
   ;; Example of importing and finalizing a plan
   (github!)
-  (def PLAN (pst/import-plan-from-json "16.04.1"))
+  (def PLAN (import-plan-from-json "16.04.1"))
   (doseq [d PLAN] (println d))
   (def MS-CURR 214) ;just planned
   (def MS-NEXT 215) ;future sprint
