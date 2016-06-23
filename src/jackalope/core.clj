@@ -131,9 +131,9 @@
   ;; to and then consider active for the sprint"
   (let [{:keys [maybes edits] :as eds} (edits-from plan ms-curr ms-next)
         conn (github-conn)]
-    (doall (for [e edits] (github/edit-issue conn e)))
-    (doall (for [n (map :number maybes)]
-             (github/add-a-label conn n :maybe)))
+    (doseq [e edits] (github/edit-issue conn e))
+    (doseq [n (map :number maybes)]
+      (github/add-a-label conn n :maybe))
     {:edits edits
      :maybes maybes}))
 
