@@ -5,6 +5,8 @@
             [jackalope.retrospective :as retro]
             [clojure.set :as set]))
 
+(def DEFAULT-CONF "github-prod.edn")
+
 (defonce ^:private github-atom (atom nil))
 
 (defn github!
@@ -22,7 +24,7 @@
        (reset! github-atom c)
        true))
   ([]
-     (github! "github-prod.edn")))
+     (github! DEFAULT-CONF)))
 
 (defn github-conn []
   (or  @github-atom
@@ -33,6 +35,11 @@
   (github/edit-issue (github-conn) {:number (:number i)
                                     :milestone ms-num}))
 
+(defn get-milestone-title [ms-num]
+  (let [title (:title (github/get-milestone (github-conn) ms-num))]
+    (assert title)
+    title))
+
 (defn editor [ms-curr ms-next]
   (fn [{:keys [number do?] :as dec}]
     ;; Given a decision, determine what if anything should be
@@ -41,6 +48,8 @@
      {:number number
       :milestone (case do?
                    ;; TODO: if we stop using ms-curr, we'd just NOOP the yes issues
+                   ;;       (a yes causes an unecessary edit, if we're using the
+                   ;;        same milestone id for the curr release plan)
                    :yes   ms-curr
                    :no    ms-next
                    :maybe ms-curr)}
@@ -124,6 +133,7 @@
    {:edited [sequence of results from each issue edit]
     :maybes [sequence of results from each maybe label add]"
   [plan ms-curr ms-next]
+  ;; TODO: factor out a plan* function; allow edits to be previewed
   ;; TODO: return specific data that would be usable for fully undo-ing
   ;; TODO: use of ms-curr could be removed if the just-planned issues were 
   ;; already assigned the current milestone (e.g., the nominations milestone).
@@ -195,6 +205,9 @@
   "Runs the specfiied actions. The actions must follow the structure returned by
    sweep-milestone."
   ;; TODO: provide API status/return for each action
+  ;; need to clear *all* maybes when we do a milestone sweep. currently, we only
+  ;; clear the ones from the closing milestone. if there are maybe labels in the
+  ;; nominated milestone, they don't get cleared
   [actions]
   (doseq [{:keys [number]} (filter (action= :unmaybe) actions)]
     (unmaybe number))
@@ -203,11 +216,16 @@
 
 (defn generate-retrospective-report
   "Generates a retrospective report, using the specified milestone and saved
-   plan. Saves the report as HTML to a local file. Returns the filename."
- [ms-num ms-title]
-  (let [plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
-        issues (fetch-all-issues ms-num plan)]
-    (retro/generate-report plan issues ms-title)))
+   plan. Saves the report as HTML to a local file. Returns the filename.
+  
+   The single argument version fetches the milestone title from github."
+ ;;TODO: remove 2 arg version?
+  ([ms-num ms-title]
+   (let [plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
+         issues (fetch-all-issues ms-num plan)]
+     (retro/generate-report plan issues ms-title)))
+  ([ms-num]
+     (generate-retrospective-report ms-num (get-milestone-title ms-num))))
 
 (comment 
   ;; Example of importing and finalizing a plan

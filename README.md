@@ -102,13 +102,11 @@ jackalope.core=> (sweep! ACTS)
 
 ### Generate a retrospective report
 
-This workflow sweeps a specified milestone:
-* clears 'maybe' labels from the issues in the current milestone
-* rolls forward incomplete (non closed) issues from the current milestone to the next milestone
+This workflow generates a retrospective report from a given plan and milestone. The report shows basic outcomes, such as which planned items were completed and which were not. a specified milestone:
 
 This workflow requires:
-* a milestone in github; the milestone that represents the release and we want a retrospective for it
-* the EDN file that represents the plan for the release
+* a milestone in github (the recently completed milestone for which to generate a retrospective report)
+* the EDN file that represents the plan for the recent release
 
 __Example REPL session:__
 

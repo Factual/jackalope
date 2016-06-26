@@ -40,14 +40,20 @@
 (defn fetch-issues-and-prs-by-milestone
   "Returns the issues assigned to the specified milestone"
   [{:keys [user repo auth]} ms-num]
-  ;; TODO: not wrapping in (assure...), since it seems that sometimes this 
-  ;;       naturally returns nil metadata (??). Need to find a good way to
-  ;;       to assure the result is good
-  (issues/issues user repo 
-                 {:auth      auth
-                  :milestone ms-num
-                  :state     "all"
-                  :all-pages true}))
+  (let [is (issues/issues user repo 
+                          {:auth      auth
+                           :milestone ms-num
+                           :state     "all"
+                           :all-pages true})]
+    ;; for some reason, this doesn't always return non-nil metadata, therefore
+    ;; not using (assure). Instead, assuming that a non map structure as the
+    ;; top-level results means that something is wrong with getting issues.
+    (if-not (map? is)
+      is
+      (throw (RuntimeException. (format "Bad result, status: %s. %s"
+                                        (:status is)
+                                        (str (get-in is [:body :message]) " "
+                                             (get-in is [:body :errors]))))))))
 
 (defn fetch-issues-by-milestone
   "Returns the issues assigned to the specified milestone, minus pull requests."
@@ -77,9 +83,15 @@
 (defn fetch-issue-events [{:keys [user repo auth]} inum]
   (assure (issues/issue-events user repo inum {:auth auth})))
 
+(defn get-milestone [{:keys [user repo auth]} msid]
+  (assure (issues/specific-milestone user repo msid {:auth auth})))
+
 ;TODO! get this to work
 ; example that needs a working repo filter:
 ; (:total_count (search-issues CONN "geopulse" {}))
 ; also TODO: how to leave out keywords?
 (defn search-issues [{:keys [user repo auth]} keywords q]
-  (assure (search/search-issues keywords q {:auth auth})))
+  (search/search-issues keywords q {:auth auth}))
+
+(defn search-hotfixes [auth]
+  (search-issues auth nil {:label "hotfix!"}))

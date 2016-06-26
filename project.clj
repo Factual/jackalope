@@ -1,4 +1,4 @@
-(defproject jackalope "0.0.3"
+(defproject jackalope "0.0.4"
   :description "An opinionated approach to spry software development using github."
   :url "https://github.com/Factual/jackalope"
   :scm {:name "git"
@@ -10,4 +10,7 @@
                  [tentacles "0.3.0"]
                  [hiccup "1.0.5"]
                  [clojure-csv "2.0.1"]
-                 [org.clojure/data.json "0.2.6"]])
+                 [org.clojure/data.json "0.2.6"]
+                 [org.clojure/tools.cli "0.3.5"]]
+  :main jackalope.main
+  :uberjar-name "jackalope.jar")
