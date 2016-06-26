@@ -47,11 +47,14 @@
   "Finalizes the plan for the specified milestone.
    Assumes the next milestone id is milestone + 1.
    Assumes a local plan file name '[milestone title].plan.edn'"
-  ;; TODO: support preview. this requires an intermediate plan* in core
-  [{:keys [milestone]}]
-  (let [plan (pst/import-plan-from-json (core/get-milestone-title milestone))
-        edits (core/plan! plan milestone (inc milestone))]
-    (doseq [e (:edits edits)] (println e))))
+  [{:keys [milestone preview]}]
+  (let [plan (pst/import-plan-from-json (core/get-milestone-title milestone))]
+    (if preview
+      (let [{:keys [edits maybes]} (core/plan* plan milestone (inc milestone))]
+        (doseq [e edits] (println e)))
+      (do
+        (core/plan! plan milestone (inc milestone))
+        (println "Finalized plan for milestone" milestone)))))
 
 (def COMMAND-FNS 
   {"sweep" sweep!

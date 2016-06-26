@@ -102,6 +102,11 @@
 ;; Main use cases
 ;;
 
+(defn plan* [plan ms-curr ms-next]
+  (let [{:keys [maybes edits]} (edits-from plan ms-curr ms-next)]
+    {:edits edits
+     :maybes maybes}))
+
 (defn plan!
   "Updates the specified Github repo issues based on the specified plan.
    This *only* addresses issues in the specified plan. E.g., if there are
@@ -133,19 +138,18 @@
    {:edited [sequence of results from each issue edit]
     :maybes [sequence of results from each maybe label add]"
   [plan ms-curr ms-next]
-  ;; TODO: factor out a plan* function; allow edits to be previewed
+  ;; TODO: change to take output of plan* (actions) 
   ;; TODO: return specific data that would be usable for fully undo-ing
   ;; TODO: use of ms-curr could be removed if the just-planned issues were 
   ;; already assigned the current milestone (e.g., the nominations milestone).
   ;; ms-curr is only used right now as "the new milestone to move 'yes' issues
   ;; to and then consider active for the sprint"
-  (let [{:keys [maybes edits] :as eds} (edits-from plan ms-curr ms-next)
+  (let [{:keys [maybes edits] :as eds} (plan* plan ms-curr ms-next)
         conn (github-conn)]
     (doseq [e edits] (github/edit-issue conn e))
     (doseq [n (map :number maybes)]
       (github/add-a-label conn n :maybe))
-    {:edits edits
-     :maybes maybes}))
+    eds))
 
 (defn sweep-milestone
   "Given the current milestone id ms-curr and the next milestone id ms-next,
