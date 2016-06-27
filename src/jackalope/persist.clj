@@ -1,6 +1,6 @@
 (ns jackalope.persist
-  (:require [clojure.string :as str])
-  (:require [clojure.data.json :as json]))
+  (:require [clojure.string :as str]
+            [clojure.data.json :as json]))
 
 (defn normalize-decision-text [t]
   (case (-> (if (and (not (keyword? t)) (empty? t)) "" (name t))
@@ -41,8 +41,11 @@
   (Integer/parseInt (str v)))
 
 (defn read-issues-from-zenhub-json
-  "Reads in the raw JSON exported from ZenHub
-   (expects the format created by HongHao's 'zh dumper' extension).
+  "Reads in the raw JSON exported from ZenHub.
+
+   Expects the format created by HongHao's 'zh dumper' extension or ZenHub's own
+   format. 
+   TODO: only use ZenHub format.
 
    Returns a hash-map where keys are the pipelines and values are a collection of issue 
    numbers, representing the issues in that pipeline. Like:
@@ -59,7 +62,17 @@
                (str/replace #"\s" "")
                str/lower-case
                keyword)
-           (map #(as-int (get % "id")) (get p "issues"))])))
+           (map #(as-int (or
+                          ;; manual 'zh dumper' has 'id'
+                          ;; zenhub api has 'issue_number'
+                          (get % "id")
+                          (get % "issue_number")))
+                (get p "issues"))])))
+
+(defn save-plan-from-zenhub [ms-title boards]
+  (let [f (format "%s.plan.json" ms-title)]
+    (spit f (json/json-str boards))
+    f))
 
 (defn read-plan-from-json
   "Reads a sprint plan from JSON exported from ZenHub and returns a collection of 

@@ -10,6 +10,7 @@
                  [tentacles "0.3.0"]
                  [hiccup "1.0.5"]
                  [clojure-csv "2.0.1"]
+                 [http-kit "2.1.18"]
                  [org.clojure/data.json "0.2.6"]
                  [org.clojure/tools.cli "0.3.5"]]
   :main jackalope.main

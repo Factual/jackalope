@@ -1,5 +1,6 @@
 (ns jackalope.core
   (:require [jackalope.github :as github]
+            [jackalope.zenhub :as zenhub]
             [jackalope.issues :as issues]
             [jackalope.persist :as pst]
             [jackalope.retrospective :as retro]
@@ -34,11 +35,6 @@
 (defn set-milestone [i ms-num]
   (github/edit-issue (github-conn) {:number (:number i)
                                     :milestone ms-num}))
-
-(defn get-milestone-title [ms-num]
-  (let [title (:title (github/get-milestone (github-conn) ms-num))]
-    (assert title)
-    title))
 
 (defn editor [ms-curr ms-next]
   (fn [{:keys [number do?] :as dec}]
@@ -97,10 +93,25 @@
 (defn unmaybe [inum]
   (github/remove-a-label (github-conn) inum :maybe))
 
+(defn get-open-milestone-number-for [ms-title]
+  (github/get-open-milestone-by-title (github-conn) ms-title))
+
 
 ;;
 ;; Main use cases
 ;;
+
+(defn import-plan-from-zenhub
+  "Imports the plan data for the specified milestone. Fetches the data from
+   ZenHub, saves to a JSON file, returns the name of the file."
+  [ms-num ms-title]
+  (let [{:keys [repo zenhub-token] :as gc} (github-conn)
+        repo-id (:id (github/get-repo gc))
+        boards (zenhub/get-boards zenhub-token repo-id)
+        issue-nums (map :number (github/fetch-issues-by-milestone
+                                 (github-conn) ms-num))]
+    (pst/save-plan-from-zenhub ms-title
+                               (zenhub/keep-in-boards issue-nums boards))))
 
 (defn plan* [plan ms-curr ms-next]
   (let [{:keys [maybes edits]} (edits-from plan ms-curr ms-next)]

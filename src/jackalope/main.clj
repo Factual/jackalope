@@ -14,14 +14,27 @@
    ["-c" "--conf CONNF" "Configuration file (github auth)"
     :default core/DEFAULT-CONF
     :validate [#(good-conf-file? %) "Must be a valid configuration file"]]
-   ["-m" "--milestone MILESTONE"
+   ["-m" "--milestone MILESTONE"]
+   ["-i" "--milestone-number MILESTONE-NUMBER"
     :parse-fn #(Integer/parseInt %)
-    :validate [#(< 0 % 65536) "Must be a valid milestone id"]]])
+    :validate [#(< 0 % 65536) "Must be a valid milestone number"]]])
 
 (defn print-stderr [errs]
   (binding [*out* *err*]
     (doseq [e errs]
       (println e))))
+
+(defn good-opts
+  "Validate and groom cli options:
+   * make sure there's a valid milestone indicator
+     (So far, all CLI commands require a milestone so this
+      hardwires it as expected)"
+  [{:keys [milestone milestone-number] :as opts}]
+  (assert (or milestone milestone-number) "You must indicate a milestone")
+  (merge opts
+         (when milestone
+           {:milestone-number
+            (:number (core/get-open-milestone-number-for milestone))})))
 
 (defn sweep!
   "Runs a sweep of the specified milestone into the next milestone.
@@ -48,7 +61,7 @@
    Assumes the next milestone id is milestone + 1.
    Assumes a local plan file name '[milestone title].plan.edn'"
   [{:keys [milestone preview]}]
-  (let [plan (pst/import-plan-from-json (core/get-milestone-title milestone))]
+  (let [plan (pst/import-plan-from-json milestone)]
     (if preview
       (let [{:keys [edits maybes]} (core/plan* plan milestone (inc milestone))]
         (doseq [e edits] (println e)))
@@ -62,10 +75,12 @@
    "plan" plan!})
 
 (defn run [cmd opts]
-  (let [connf (:conf opts)]
-    (core/github! connf)
+  (let [conf (:conf opts)]
+    (core/github! conf)
     (assert (contains? COMMAND-FNS cmd) "You must specify a valid action command")
-    ((get COMMAND-FNS cmd) opts)))
+    ((get COMMAND-FNS cmd) (good-opts opts))))
+
+;; comments! and more
 
 (defn -main
   [& args]
@@ -73,3 +88,4 @@
     (if-let [errs (:errors opts)]
       (print-stderr errs)
       (run (first args) (:options opts)))))
+

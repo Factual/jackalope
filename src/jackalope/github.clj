@@ -1,9 +1,7 @@
-;TODO! fail early and loudly if API error, e.g. bad CONN data like "somestr",
-;      or failure to provide 2-factor auth OTP when turned on
-
 (ns jackalope.github
   (:require [tentacles.issues :as issues]
             [tentacles.search :as search]
+            [tentacles.repos :as repos]
             [clojure.set :as set]))
 
 (def ISSUE-KEY-BLACKLIST
@@ -85,6 +83,16 @@
 
 (defn get-milestone [{:keys [user repo auth]} msid]
   (assure (issues/specific-milestone user repo msid {:auth auth})))
+
+(defn get-open-milestone-by-title [{:keys [user repo auth]} title]
+  (let [mss (issues/repo-milestones user repo {:auth auth :state :open})
+        ms (first (filter #(= title (:title %)) mss))]
+    (assert ms (str "Did not fine an open milestone with title: " title))
+    ms))
+
+(defn get-repo [{:keys [user repo auth]}]
+  ;; doesn't seem to require a repo name; always returns the data for repo
+  (assure (repos/specific-repo user repo {:auth auth})))
 
 ;TODO! get this to work
 ; example that needs a working repo filter:
