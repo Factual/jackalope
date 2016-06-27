@@ -94,8 +94,6 @@
   (assert (contains? COMMAND-FNS cmd) "You must specify a valid action command")
   ((get COMMAND-FNS cmd) (good-opts opts)))
 
-;; comments! and more
-
 (defn -main
   [& args]
   (let [opts (parse-opts args cli-options)]
