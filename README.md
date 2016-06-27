@@ -78,10 +78,10 @@ Example output from the changes review:
 
 This workflow sweeps a specified milestone:
 * clears 'maybe' labels from the issues in the current milestone
-* rolls forward incomplete (non closed) issues from the current mileston to the next milestone
+* rolls forward incomplete (non closed) issues from the current milestone to the next milestone
 
 This workflow requires:
-* 2 milestones in github: one milestone that is the current mileston (the milestone to be swept), and one milestone that represents the next (future) sprint (the milestone to roll forward non-closed tickets into).
+* 2 milestones in github: one milestone that is the current milestone (the milestone to be swept), and one milestone that represents the next (future) sprint (the milestone to roll forward non-closed tickets into).
 
 __Example REPL session:__
 
@@ -102,12 +102,11 @@ jackalope.core=> (sweep! ACTS)
 
 ### Generate a retrospective report
 
-This workflow sweeps a specified milestone:
-* clears 'maybe' labels from the issues in the current milestone
-* rolls forward incomplete (non closed) issues from the current mileston to the next milestone
+This workflow generates a retrospective report from a given plan and milestone. The report shows basic outcomes, such as which planned items were completed and which were not. a specified milestone:
 
 This workflow requires:
-* 2 milestones in github: one milestone that is the current mileston (the milestone to be swept), and one milestone that represents the next (future) sprint (the milestone to roll forward non-closed tickets into).
+* a milestone in github (the recently completed milestone for which to generate a retrospective report)
+* the EDN file that represents the plan for the recent release
 
 __Example REPL session:__
 
