@@ -51,3 +51,7 @@
 
           (json/read-str body))
         (thro error))))
+
+(defn get-boards-keep [token repo-id issue-nums]
+  (->> (get-boards token repo-id)
+      (keep-in-boards issue-nums)))

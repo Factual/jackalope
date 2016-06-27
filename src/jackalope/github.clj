@@ -81,13 +81,14 @@
 (defn fetch-issue-events [{:keys [user repo auth]} inum]
   (assure (issues/issue-events user repo inum {:auth auth})))
 
-(defn get-milestone [{:keys [user repo auth]} msid]
-  (assure (issues/specific-milestone user repo msid {:auth auth})))
+(defn get-milestone [{:keys [user repo auth]} ms-num]
+  (assure (issues/specific-milestone user repo ms-num {:auth auth})))
 
+;; TODO: be sure to fetch *all* milestones and filter them
 (defn get-open-milestone-by-title [{:keys [user repo auth]} title]
   (let [mss (issues/repo-milestones user repo {:auth auth :state :open})
         ms (first (filter #(= title (:title %)) mss))]
-    (assert ms (str "Did not fine an open milestone with title: " title))
+    (assert ms (str "Did not find an open milestone with title: " title))
     ms))
 
 (defn get-repo [{:keys [user repo auth]}]

@@ -93,8 +93,13 @@
 (defn unmaybe [inum]
   (github/remove-a-label (github-conn) inum :maybe))
 
-(defn get-open-milestone-number-for [ms-title]
+(defn get-milestone [ms-num]
+  (github/get-milestone (github-conn) ms-num))
+
+(defn get-open-milestone-by-title [ms-title]
   (github/get-open-milestone-by-title (github-conn) ms-title))
+
+
 
 
 ;;
@@ -103,15 +108,18 @@
 
 (defn import-plan-from-zenhub
   "Imports the plan data for the specified milestone. Fetches the data from
-   ZenHub, saves to a JSON file, returns the name of the file."
+   ZenHub and saves it to a JSON file and a Jackalope-ready EDN file.
+   Returns a hash-map like:
+     {:plan-json [JSON filename]
+      :plan-edn  [EDN filename]
+      :plan      [PLAN (as a structure)]"
   [ms-num ms-title]
   (let [{:keys [repo zenhub-token] :as gc} (github-conn)
         repo-id (:id (github/get-repo gc))
-        boards (zenhub/get-boards zenhub-token repo-id)
         issue-nums (map :number (github/fetch-issues-by-milestone
-                                 (github-conn) ms-num))]
-    (pst/save-plan-from-zenhub ms-title
-                               (zenhub/keep-in-boards issue-nums boards))))
+                                 (github-conn) ms-num))
+        boards (zenhub/get-boards-keep zenhub-token repo-id issue-nums)] 
+    (pst/save-plan-from-zenhub ms-title boards)))
 
 (defn plan* [plan ms-curr ms-next]
   (let [{:keys [maybes edits]} (edits-from plan ms-curr ms-next)]
@@ -231,16 +239,12 @@
 
 (defn generate-retrospective-report
   "Generates a retrospective report, using the specified milestone and saved
-   plan. Saves the report as HTML to a local file. Returns the filename.
-  
-   The single argument version fetches the milestone title from github."
- ;;TODO: remove 2 arg version?
+   plan. Saves the report as HTML to a local file. Returns the filename."
+
   ([ms-num ms-title]
    (let [plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
          issues (fetch-all-issues ms-num plan)]
-     (retro/generate-report plan issues ms-title)))
-  ([ms-num]
-     (generate-retrospective-report ms-num (get-milestone-title ms-num))))
+     (retro/generate-report plan issues ms-title))))
 
 (comment 
   ;; Example of importing and finalizing a plan
