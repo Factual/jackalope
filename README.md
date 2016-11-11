@@ -16,30 +16,40 @@ Example credentials file:
 
 In the above example, we are asking Jackalope to login as `some_user` for the purpose of managing issues in a Github repo named `some_repo`, owned by dirtyvagabond. Presumably, dirtyvagabond has already granted collaboration privileges to `some_user`. Note that `some_user` will be the user indicated by Github as the user doing the ticket management (editing labels, milestone assignments, etc.)
 
-## CLI Usage
+## Command Line Usage
+
 This section illustrates Jackalope's basic CLI.
 
-```
-__plan__  For use after setting a plan. Retrieves boards from ZenHub and updates tickets per our decisions. 
+__plan__ For use after setting a plan. Retrieves boards from ZenHub and updates tickets per our decisions. 
 requires --conf
 requires a --milestone-title or a --milestone-number
 supports --preview
+
+Examples:
+```
+lein run -- plan --conf github-prod.edn -n 225 --preview
+lein run -- plan --conf github-prod.edn -n 225
+```
 
 __sweep__  For use at the end of a sprint. Sweeps tickets from one milestone to the next.
 requires --conf
 requires a --milestone-title or a --milestone-number
 supports --preview
 
+Examples:
+```
+lein run -- sweep --conf github-prod.edn -n 225 --preview
+lein run -- sweep --conf github-prod.edn -n 225
+```
+
 __retrospective__  For use at the end of a sprint. Creates a simple HTML file with sprint outcomes.
 requires --conf
 requires a --milestone-title or a --milestone-number
 output will be a an HTML file named after the sprint's milestone, e.g.:
-  16.11.2.retrospective.html
+`16.11.2.retrospective.html`
 
-Example CLI calls, using Leiningen:
-lein run -- plan --conf github-prod.edn -n 225 --preview
-lein run -- plan --conf github-prod.edn -n 225
-lein run -- sweep --conf github-prod.edn -n 225
+Example:
+```
 lein run -- retrospective --conf github-prod.edn -n 225
 ```
 
