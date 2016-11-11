@@ -6,19 +6,19 @@
 ;
 ; plan  For use after setting a plan. Retrieves boards from ZenHub and updates
 ;       tickets per our decisions. 
-;   requires --conf.
+;   requires --conf
 ;   requires a --milestone-title or a --milestone-number
 ;   supports --preview
 ;
 ; sweep  For use at the end of a sprint. Sweeps tickets from one milestone to
 ;        the next.
-;   requires --conf.
+;   requires --conf
 ;   requires a --milestone-title or a --milestone-number
 ;   supports --preview
 ;
 ; retrospective  For use at the end of a sprint. Creates a simple HTML file with
 ;                sprint outcomes.
-;   requires --conf.
+;   requires --conf
 ;   requires a --milestone-title or a --milestone-number
 ;   output will be a an HTML file named after the sprint's milestone, e.g.:
 ;     16.11.2.retrospective.html
