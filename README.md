@@ -4,9 +4,10 @@ An opinionated approach to spry software development using github.
 
 ## Github and ZenHub access
 
-Jackalope helps manage Github issues based on ZenHub boards. It therefore requires credentials for a Github account that has access to the corresponding repository, and credential for a ZenHub API account that has access to the corresponding ZenHub boards. When using Jackalope from the command line, supply credentials via the file, `github-prod.edn`. Example file contents:
+Jackalope helps manage Github issues based on ZenHub boards. It therefore requires credentials for a Github account that has access to the corresponding repository, and credential for a ZenHub API account that has access to the corresponding ZenHub boards. 
 
-Example credentials file:
+When using Jackalope from the command line, point to your credentials settings with the `--conf` option. Example credential file contents:
+
 ```clojure
 {:auth "some_user:some_password"
  :user "dirtyvagabond"
