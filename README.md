@@ -2,9 +2,52 @@
 
 An opinionated approach to spry software development using github.
 
-## Connecting
+## Github and ZenHub access
 
-Jackalope helps manage Github issues and therefore requires credentials for a Github account that has access to the corresponding repository.
+Jackalope helps manage Github issues based on ZenHub boards. It therefore requires credentials for a Github account that has access to the corresponding repository, and credential for a ZenHub API account that has access to the corresponding ZenHub boards. When using Jackalope from the command line, supply credentials via the file, `github-prod.edn`. Example file contents:
+
+Example credentials file:
+```clojure
+{:auth "some_user:some_password"
+ :user "dirtyvagabond"
+ :repo "some_repo"
+ :zenhub-token "my_api_token"}
+```
+
+In the above example, we are asking Jackalope to login as `some_user` for the purpose of managing issues in a Github repo named `some_repo`, owned by dirtyvagabond. Presumably, dirtyvagabond has already granted collaboration privileges to `some_user`. Note that `some_user` will be the user indicated by Github as the user doing the ticket management (editing labels, milestone assignments, etc.)
+
+## CLI Usage
+This section illustrates Jackalope's basic CLI.
+
+```
+__plan__  For use after setting a plan. Retrieves boards from ZenHub and updates tickets per our decisions. 
+requires --conf
+requires a --milestone-title or a --milestone-number
+supports --preview
+
+__sweep__  For use at the end of a sprint. Sweeps tickets from one milestone to the next.
+requires --conf
+requires a --milestone-title or a --milestone-number
+supports --preview
+
+__retrospective__  For use at the end of a sprint. Creates a simple HTML file with sprint outcomes.
+requires --conf
+requires a --milestone-title or a --milestone-number
+output will be a an HTML file named after the sprint's milestone, e.g.:
+  16.11.2.retrospective.html
+
+Example CLI calls, using Leiningen:
+lein run -- plan --conf github-prod.edn -n 225 --preview
+lein run -- plan --conf github-prod.edn -n 225
+lein run -- sweep --conf github-prod.edn -n 225
+lein run -- retrospective --conf github-prod.edn -n 225
+```
+
+## REPL based examples
+
+This section illustrates use of Jackalope on the REPL.
+
+### Connect
 
 You establish a connection by calling the `github!` function in the `core` namespace. You can supply no arguments, in which case it will attempt to read credentials from `github-prod.edn` in the current working directory. Or you can provide a file path as an argument, in which case it'll attempt to read credentials from that file. E.g.:
 
@@ -14,18 +57,6 @@ You establish a connection by calling the `github!` function in the `core` names
 
 When the credentials file is found and read, `github!` will return `true` (but this does not guarantee that the credentials are correct).
 
-Example credentials file:
-```clojure
-{:auth "some_user:some_password"
- :user "dirtyvagabond"
- :repo "some_repo"}
-```
-
-In the above example, we are asking Jackalope to login as `some_user` for the purpose of managing issues in a Github repo named `some_repo`, owned by dirtyvagabond. Presumably, dirtyvagabond has already granted collaboration privileges to `some_user`. Note that `some_user` will be the user indicated by Github as the user doing the ticket management (editing labels, milestone assignments, etc.)
-
-## REPL based examples
-
-This section illustrates use of Jackalope on the REPL.
 
 ### Import and finalize a plan
 
@@ -78,10 +109,10 @@ Example output from the changes review:
 
 This workflow sweeps a specified milestone:
 * clears 'maybe' labels from the issues in the current milestone
-* rolls forward incomplete (non closed) issues from the current mileston to the next milestone
+* rolls forward incomplete (non closed) issues from the current milestone to the next milestone
 
 This workflow requires:
-* 2 milestones in github: one milestone that is the current mileston (the milestone to be swept), and one milestone that represents the next (future) sprint (the milestone to roll forward non-closed tickets into).
+* 2 milestones in github: one milestone that is the current milestone (the milestone to be swept), and one milestone that represents the next (future) sprint (the milestone to roll forward non-closed tickets into).
 
 __Example REPL session:__
 
@@ -102,12 +133,11 @@ jackalope.core=> (sweep! ACTS)
 
 ### Generate a retrospective report
 
-This workflow sweeps a specified milestone:
-* clears 'maybe' labels from the issues in the current milestone
-* rolls forward incomplete (non closed) issues from the current mileston to the next milestone
+This workflow generates a retrospective report from a given plan and milestone. The report shows basic outcomes, such as which planned items were completed and which were not. a specified milestone:
 
 This workflow requires:
-* 2 milestones in github: one milestone that is the current mileston (the milestone to be swept), and one milestone that represents the next (future) sprint (the milestone to roll forward non-closed tickets into).
+* a milestone in github (the recently completed milestone for which to generate a retrospective report)
+* the EDN file that represents the plan for the recent release
 
 __Example REPL session:__
 
