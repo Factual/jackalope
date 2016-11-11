@@ -1,9 +1,7 @@
-;TODO! fail early and loudly if API error, e.g. bad CONN data like "somestr",
-;      or failure to provide 2-factor auth OTP when turned on
-
 (ns jackalope.github
   (:require [tentacles.issues :as issues]
             [tentacles.search :as search]
+            [tentacles.repos :as repos]
             [clojure.set :as set]))
 
 (def ISSUE-KEY-BLACKLIST
@@ -40,14 +38,20 @@
 (defn fetch-issues-and-prs-by-milestone
   "Returns the issues assigned to the specified milestone"
   [{:keys [user repo auth]} ms-num]
-  ;; TODO: not wrapping in (assure...), since it seems that sometimes this 
-  ;;       naturally returns nil metadata (??). Need to find a good way to
-  ;;       to assure the result is good
-  (issues/issues user repo 
-                 {:auth      auth
-                  :milestone ms-num
-                  :state     "all"
-                  :all-pages true}))
+  (let [is (issues/issues user repo 
+                          {:auth      auth
+                           :milestone ms-num
+                           :state     "all"
+                           :all-pages true})]
+    ;; for some reason, this doesn't always return non-nil metadata, therefore
+    ;; not using (assure). Instead, assuming that a non map structure as the
+    ;; top-level results means that something is wrong with getting issues.
+    (if-not (map? is)
+      is
+      (throw (RuntimeException. (format "Bad result, status: %s. %s"
+                                        (:status is)
+                                        (str (get-in is [:body :message]) " "
+                                             (get-in is [:body :errors]))))))))
 
 (defn fetch-issues-by-milestone
   "Returns the issues assigned to the specified milestone, minus pull requests."
@@ -77,9 +81,26 @@
 (defn fetch-issue-events [{:keys [user repo auth]} inum]
   (assure (issues/issue-events user repo inum {:auth auth})))
 
+(defn get-milestone [{:keys [user repo auth]} ms-num]
+  (assure (issues/specific-milestone user repo ms-num {:auth auth})))
+
+;; TODO: be sure to fetch *all* milestones and filter them
+(defn get-open-milestone-by-title [{:keys [user repo auth]} title]
+  (let [mss (issues/repo-milestones user repo {:auth auth :state :open})
+        ms (first (filter #(= title (:title %)) mss))]
+    (assert ms (str "Did not find an open milestone with title: " title))
+    ms))
+
+(defn get-repo [{:keys [user repo auth]}]
+  ;; doesn't seem to require a repo name; always returns the data for repo
+  (assure (repos/specific-repo user repo {:auth auth})))
+
 ;TODO! get this to work
 ; example that needs a working repo filter:
 ; (:total_count (search-issues CONN "geopulse" {}))
 ; also TODO: how to leave out keywords?
 (defn search-issues [{:keys [user repo auth]} keywords q]
-  (assure (search/search-issues keywords q {:auth auth})))
+  (search/search-issues keywords q {:auth auth :all-pages true}))
+
+(defn search-hotfixes [auth]
+  (search-issues auth nil {:label "hotfix!"}))

@@ -1,9 +1,12 @@
 (ns jackalope.core
   (:require [jackalope.github :as github]
+            [jackalope.zenhub :as zenhub]
             [jackalope.issues :as issues]
             [jackalope.persist :as pst]
             [jackalope.retrospective :as retro]
             [clojure.set :as set]))
+
+(def DEFAULT-CONF "github-prod.edn")
 
 (defonce ^:private github-atom (atom nil))
 
@@ -22,7 +25,7 @@
        (reset! github-atom c)
        true))
   ([]
-     (github! "github-prod.edn")))
+     (github! DEFAULT-CONF)))
 
 (defn github-conn []
   (or  @github-atom
@@ -41,9 +44,12 @@
      {:number number
       :milestone (case do?
                    ;; TODO: if we stop using ms-curr, we'd just NOOP the yes issues
+                   ;;       (a yes causes an unecessary edit, if we're using the
+                   ;;        same milestone id for the curr release plan)
                    :yes   ms-curr
                    :no    ms-next
-                   :maybe ms-curr)}
+                   :maybe ms-curr
+                   (throw (IllegalArgumentException. (format "Unrecognized decision: |%s|" do?))))}
      (when (= do? :maybe)
        {:label+ :maybe}))))
 
@@ -88,10 +94,38 @@
 (defn unmaybe [inum]
   (github/remove-a-label (github-conn) inum :maybe))
 
+(defn get-milestone [ms-num]
+  (github/get-milestone (github-conn) ms-num))
+
+(defn get-open-milestone-by-title [ms-title]
+  (github/get-open-milestone-by-title (github-conn) ms-title))
+
+
+
 
 ;;
 ;; Main use cases
 ;;
+
+(defn import-plan-from-zenhub
+  "Imports the plan data for the specified milestone. Fetches the data from
+   ZenHub and saves it to a JSON file and a Jackalope-ready EDN file.
+   Returns a hash-map like:
+     {:plan-json [JSON filename]
+      :plan-edn  [EDN filename]
+      :plan      [PLAN (as a structure)]"
+  [ms-num ms-title]
+  (let [{:keys [repo zenhub-token] :as gc} (github-conn)
+        repo-id (:id (github/get-repo gc))
+        issue-nums (map :number (github/fetch-issues-by-milestone
+                                 (github-conn) ms-num))
+        boards (zenhub/get-boards-keep zenhub-token repo-id issue-nums)] 
+    (pst/save-plan-from-zenhub ms-title boards)))
+
+(defn plan* [plan ms-curr ms-next]
+  (let [{:keys [maybes edits]} (edits-from plan ms-curr ms-next)]
+    {:edits edits
+     :maybes maybes}))
 
 (defn plan!
   "Updates the specified Github repo issues based on the specified plan.
@@ -106,7 +140,7 @@
 
    The first argument must contain all necessary 'connection' data.
 
-   ms-num should be the number of the milestone to be finalized per the plan.
+   ms-curr should be the number of the milestone to be finalized per the plan.
 
    ms-next should be the number of the next milestone. I.e., the milestone that 
    represents the next future sprint, to which we'll roll-over issues that we
@@ -124,18 +158,18 @@
    {:edited [sequence of results from each issue edit]
     :maybes [sequence of results from each maybe label add]"
   [plan ms-curr ms-next]
+  ;; TODO: change to take output of plan* (actions) 
   ;; TODO: return specific data that would be usable for fully undo-ing
   ;; TODO: use of ms-curr could be removed if the just-planned issues were 
   ;; already assigned the current milestone (e.g., the nominations milestone).
   ;; ms-curr is only used right now as "the new milestone to move 'yes' issues
   ;; to and then consider active for the sprint"
-  (let [{:keys [maybes edits] :as eds} (edits-from plan ms-curr ms-next)
+  (let [{:keys [maybes edits] :as eds} (plan* plan ms-curr ms-next)
         conn (github-conn)]
-    (doall (for [e edits] (github/edit-issue conn e)))
-    (doall (for [n (map :number maybes)]
-             (github/add-a-label conn n :maybe)))
-    {:edits edits
-     :maybes maybes}))
+    (doseq [e edits] (github/edit-issue conn e))
+    (doseq [n (map :number maybes)]
+      (github/add-a-label conn n :maybe))
+    eds))
 
 (defn sweep-milestone
   "Given the current milestone id ms-curr and the next milestone id ms-next,
@@ -195,6 +229,9 @@
   "Runs the specfiied actions. The actions must follow the structure returned by
    sweep-milestone."
   ;; TODO: provide API status/return for each action
+  ;; need to clear *all* maybes when we do a milestone sweep. currently, we only
+  ;; clear the ones from the closing milestone. if there are maybe labels in the
+  ;; nominated milestone, they don't get cleared
   [actions]
   (doseq [{:keys [number]} (filter (action= :unmaybe) actions)]
     (unmaybe number))
@@ -204,10 +241,11 @@
 (defn generate-retrospective-report
   "Generates a retrospective report, using the specified milestone and saved
    plan. Saves the report as HTML to a local file. Returns the filename."
- [ms-num ms-title]
-  (let [plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
-        issues (fetch-all-issues ms-num plan)]
-    (retro/generate-report plan issues ms-title)))
+
+  ([ms-num ms-title]
+   (let [plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
+         issues (fetch-all-issues ms-num plan)]
+     (retro/generate-report plan issues ms-title))))
 
 (comment 
   ;; Example of importing and finalizing a plan

@@ -1,6 +1,12 @@
 (ns jackalope.persist
-  (:require [clojure.string :as str])
-  (:require [clojure.data.json :as json]))
+  (:require [clojure.string :as str]
+            [clojure.data.json :as json]))
+
+(defn fname-json [ms-title]
+  (str ms-title ".plan.json"))
+
+(defn fname-edn [ms-title]
+  (str ms-title ".plan.edn"))
 
 (defn normalize-decision-text [t]
   (case (-> (if (and (not (keyword? t)) (empty? t)) "" (name t))
@@ -34,15 +40,18 @@
         #(str/split % #"\t")
         (str/split (slurp f) #"\n"))))
 
-(defn read-plan [tag]
-  (read-plan-from-edn (str tag ".plan.edn")))
+(defn read-plan [ms-title]
+  (read-plan-from-edn (fname-edn ms-title)))
 
 (defn as-int [v]
   (Integer/parseInt (str v)))
 
 (defn read-issues-from-zenhub-json
-  "Reads in the raw JSON exported from ZenHub
-   (expects the format created by HongHao's 'zh dumper' extension).
+  "Reads in the raw JSON exported from ZenHub.
+
+   Expects the format created by HongHao's 'zh dumper' extension or ZenHub's own
+   format. 
+   TODO: only use ZenHub format.
 
    Returns a hash-map where keys are the pipelines and values are a collection of issue 
    numbers, representing the issues in that pipeline. Like:
@@ -59,7 +68,12 @@
                (str/replace #"\s" "")
                str/lower-case
                keyword)
-           (map #(as-int (get % "id")) (get p "issues"))])))
+           (map #(as-int (or
+                          ;; manual 'zh dumper' has 'id'
+                          ;; zenhub api has 'issue_number'
+                          (get % "id")
+                          (get % "issue_number")))
+                (get p "issues"))])))
 
 (defn read-plan-from-json
   "Reads a sprint plan from JSON exported from ZenHub and returns a collection of 
@@ -98,12 +112,25 @@
    corresponding JSON file (e.g., '16.01.2.plan.json'), and saves the EDN
    version (e.g., '16.01.2.plan.edn'). The JSON file is expected to be the
    format we import from Zenhub."
-  ([jsonf outf]
-   (let [plan (read-plan-from-json jsonf)]
-     (spit outf (with-out-str (clojure.pprint/pprint plan)))
+  ([f-json f-edn]
+   (let [plan (read-plan-from-json f-json)]
+     (spit f-edn (with-out-str (clojure.pprint/pprint plan)))
      plan))
-  ([rname]
+  ([ms-title]
    (import-plan-from-json 
-    (format "%s.plan.json" rname)
-    (format "%s.plan.edn" rname))))
+    (fname-json ms-title)
+    (fname-edn ms-title))))
 
+(defn save-plan-from-zenhub
+  "Returns a hash-map like:
+   {:plan-json [JSON filename]
+    :plan-edn  [EDN filename]
+    :plan      [PLAN (as a structure)]"
+  [ms-title boards]
+  (let [f-json (fname-json ms-title)
+        f-edn  (fname-edn ms-title)]
+    (spit f-json (json/json-str boards))
+    (let [plan (import-plan-from-json f-json f-edn)]
+      {:plan-json f-json
+       :plan-edn f-edn
+       :plan plan})))
