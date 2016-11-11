@@ -1,3 +1,34 @@
+;
+; Supports the command line interface. 
+; 
+;
+; Commands:
+;
+; plan  For use after setting a plan. Retrieves boards from ZenHub and updates
+;       tickets per our decisions. 
+;   requires --conf.
+;   requires a --milestone-title or a --milestone-number
+;   supports --preview
+;
+; sweep  For use at the end of a sprint. Sweeps tickets from one milestone to
+;        the next.
+;   requires --conf.
+;   requires a --milestone-title or a --milestone-number
+;   supports --preview
+;
+; retrospective  For use at the end of a sprint. Creates a simple HTML file with
+;                sprint outcomes.
+;   requires --conf.
+;   requires a --milestone-title or a --milestone-number
+;   output will be a an HTML file named after the sprint's milestone, e.g.:
+;     16.11.2.retrospective.html
+;
+; Example CLI calls, using lein:
+;   lein run -- plan --conf github-prod.edn -n 225 --preview
+;   lein run -- plan --conf github-prod.edn -n 225
+;   lein run -- sweep --conf github-prod.edn -n 225
+;   lein run -- retrospective --conf github-prod.edn -n 225
+;
 (ns jackalope.main
   (:require [jackalope.core :as core]
             [jackalope.persist :as pst]
@@ -58,7 +89,8 @@
 (defn generate-retrospective-report
   "Assumes a local plan file name '[milestone title].plan.edn'"
   [{:keys [milestone-title milestone-number]}]
-  (core/generate-retrospective-report milestone-number milestone-title))
+  (let [f (core/generate-retrospective-report milestone-number milestone-title)]
+    (println "Saved retrospective report at" f)))
 
 (defn plan!
   "Imports the specified plan from ZenHub and finalizes it in Github.
@@ -83,6 +115,17 @@
       (do
         (core/plan! plan milestone-number (inc milestone-number))
         (println (format "Finalized plan for %s (%s)" milestone-title milestone-number))))))
+
+(comment
+  ;; Example call to plan!, preview mode:
+  (plan! {:preview true
+           :milestone-number 219
+           :milestone-title "16.09.1"})
+
+  ;; Example call to plan!, really do it:
+  (plan! {:milestone-number 219
+          :milestone-title "16.09.1"}))
+
 
 (def COMMAND-FNS 
   {"sweep" sweep!

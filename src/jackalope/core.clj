@@ -48,7 +48,8 @@
                    ;;        same milestone id for the curr release plan)
                    :yes   ms-curr
                    :no    ms-next
-                   :maybe ms-curr)}
+                   :maybe ms-curr
+                   (throw (IllegalArgumentException. (format "Unrecognized decision: |%s|" do?))))}
      (when (= do? :maybe)
        {:label+ :maybe}))))
 
@@ -139,7 +140,7 @@
 
    The first argument must contain all necessary 'connection' data.
 
-   ms-num should be the number of the milestone to be finalized per the plan.
+   ms-curr should be the number of the milestone to be finalized per the plan.
 
    ms-next should be the number of the next milestone. I.e., the milestone that 
    represents the next future sprint, to which we'll roll-over issues that we

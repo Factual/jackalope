@@ -100,7 +100,7 @@
 ; (:total_count (search-issues CONN "geopulse" {}))
 ; also TODO: how to leave out keywords?
 (defn search-issues [{:keys [user repo auth]} keywords q]
-  (search/search-issues keywords q {:auth auth}))
+  (search/search-issues keywords q {:auth auth :all-pages true}))
 
 (defn search-hotfixes [auth]
   (search-issues auth nil {:label "hotfix!"}))
