@@ -14,14 +14,14 @@
   "Sets your authentication with Github. If cred-file is supplied, reads from
    that. Otherwise expects your credentials to be in resources/github.edn.
    Credentials should be like:
-     {:auth 'login:pwd'
-      :user 'MyOrg'
-      :repo 'myrepo'}"
+     {:user 'a_user_or_org'
+      :repo 'a_repo'
+      :github-token 'a_long_token_string_generated_via_your_github_acct'}"
   ([cred-file]
      (let [c (read-string (slurp cred-file))]
-       (assert (:auth c) "Github credentials must include :auth")
        (assert (:user c) "Github credentials must include :user")
        (assert (:repo c) "Github credentials must include :repo")
+       (assert (:github-token c) "Github credentials must include :github-token")
        (reset! github-atom c)
        true))
   ([]
@@ -32,8 +32,8 @@
        (throw (IllegalArgumentException.
                "Github API credentials must be initialized using 'github!'"))))
 
-(defn set-milestone [i ms-num]
-  (github/edit-issue (github-conn) {:number (:number i)
+(defn set-milestone [issue ms-num]
+  (github/edit-issue (github-conn) {:number (:number issue)
                                     :milestone ms-num}))
 
 (defn editor [ms-curr ms-next]
@@ -74,13 +74,6 @@
         mins (set/difference pins mids)
         adds (remove github/pull-request? (github/fetch-issues-by-nums conn mins))]
     (concat msis adds)))
-
-(defn nominated-by [issue-num]
-  (let [last-ms-event (->> issue-num
-                           (github/fetch-issue-events (github-conn))
-                           (filter #(= "milestoned" (:event %)))
-                           last)]
-    (get-in last-ms-event [:actor :login])))
 
 (defn fetch-open-issues [ms-num]
   (->> (github/fetch-issues-by-milestone (github-conn) ms-num)
@@ -226,7 +219,7 @@
     (= v (:action a))))
 
 (defn sweep!
-  "Runs the specfiied actions. The actions must follow the structure returned by
+  "Runs the specified actions. The actions must follow the structure returned by
    sweep-milestone."
   ;; TODO: provide API status/return for each action
   ;; need to clear *all* maybes when we do a milestone sweep. currently, we only
@@ -241,7 +234,6 @@
 (defn generate-retrospective-report
   "Generates a retrospective report, using the specified milestone and saved
    plan. Saves the report as HTML to a local file. Returns the filename."
-
   ([ms-num ms-title]
    (let [plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
          issues (fetch-all-issues ms-num plan)]
@@ -268,5 +260,3 @@
   ;;; be sure you really want to do this!
   ;;; (sweep! ACTIONS)
 )
-
-

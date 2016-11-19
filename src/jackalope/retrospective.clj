@@ -1,12 +1,7 @@
 (ns jackalope.retrospective
-  (:require [clojure.string :as str]
+  (:require [jackalope.issues :as i]
+            [clojure.string :as str]
             [hiccup.core :as hic]))
-
-(defn closed? [i]
-  (= "closed" (:state i)))
-
-(def open?
-  (complement closed?))
 
 (defn yes? [i]
   (= :yes (:do? i)))
@@ -40,13 +35,13 @@
    returns :inscrutable if outcome could not be determined based on our rules"
   [issue]
   (cond
-   (and (closed? issue) (yes? issue))     :done-as-planned
-   (and (closed? issue) (maybe? issue))   :done-as-maybe
-   (and (open? issue) (maybe? issue))     :not-done-maybe
+   (and (i/closed? issue) (yes? issue))     :done-as-planned
+   (and (i/closed? issue) (maybe? issue))   :done-as-maybe
+   (and (i/open? issue) (maybe? issue))     :not-done-maybe
    (and (nil? (:do? issue))
-        (closed? issue))                  :late-add
-   (and (open? issue) (no? issue))        :skipped-as-no
-   (and (open? issue) (yes? issue))       :incomplete
+        (i/closed? issue))                  :late-add
+   (and (i/open? issue) (no? issue))        :skipped-as-no
+   (and (i/open? issue) (yes? issue))       :incomplete
    :else :inscrutable))
 
 (defn +outcome [issue]
