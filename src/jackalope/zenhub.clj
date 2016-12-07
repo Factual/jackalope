@@ -2,9 +2,6 @@
   (:require [org.httpkit.client :as http]
             [clojure.data.json :as json]))
 
-(defn thro [e]
-  )
-
 (defn- get-pipelines-
   [token repo-id]
   @(http/get (format "https://api.zenhub.io/p1/repositories/%s/board" repo-id)
