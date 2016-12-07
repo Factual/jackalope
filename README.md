@@ -2,45 +2,78 @@
 
 An opinionated approach to spry software development using github.
 
+## Project build
+
+Jackalope is a Clojure project built with [Leiningen](http://leiningen.org/) (lein). Once you have Java and Leiningen installed and you've cloned the project, you can run the project tests like so...
+
+```bash
+lein test
+```
+
+There are integration tests which require a local `github-test.edn` file in order to pass (see the test's docs).
+
+... and you can build a runnable jar like so:
+```bash
+lein uberjar
+```
+
+Once the jar is successfully built you can run it from your command line. E.g.:
+```
+java -jar target/jackalope.jar --help
+```
+
+For added convenience you can create a script as a shortcut and put it in your path. E.g., create this file named jack, make it exectutable, and put it in `~/bin`:
+```bash
+java -jar ~/workspace/jackalope/target/jackalope.jar "$@"
+```
+
 ## Github and ZenHub access
 
-Jackalope helps manage Github issues based on ZenHub boards. It therefore requires credentials for a Github account that has access to the corresponding repository, and credential for a ZenHub API account that has access to the corresponding ZenHub boards. When using Jackalope from the command line, supply credentials via the file, `github-prod.edn`. Example file contents:
+Jackalope helps manage Github issues based on ZenHub boards. It therefore requires credentials for a Github account that has access to the corresponding repository, and credential for a ZenHub API account that has access to the corresponding ZenHub boards. 
 
-Example credentials file:
+When using Jackalope from the command line, point to your credentials settings with the `--conf` option. Example credential file contents:
+
 ```clojure
-{:auth "some_user:some_password"
- :user "dirtyvagabond"
- :repo "some_repo"
- :zenhub-token "my_api_token"}
+{:user "a_user_or_org"
+ :repo "a_repo"
+ :github-token "a_long_token_string_generated_via_your_github_acct"}
 ```
 
-In the above example, we are asking Jackalope to login as `some_user` for the purpose of managing issues in a Github repo named `some_repo`, owned by dirtyvagabond. Presumably, dirtyvagabond has already granted collaboration privileges to `some_user`. Note that `some_user` will be the user indicated by Github as the user doing the ticket management (editing labels, milestone assignments, etc.)
+## Command Line Usage
 
-## CLI Usage
 This section illustrates Jackalope's basic CLI.
 
-```
-__plan__  For use after setting a plan. Retrieves boards from ZenHub and updates tickets per our decisions. 
+__plan__ For use after setting a plan. Retrieves boards from ZenHub and updates tickets per our decisions. 
 requires --conf
 requires a --milestone-title or a --milestone-number
 supports --preview
+
+Examples:
+```
+jackalope plan --conf github-prod.edn --milestone-number 225 --preview
+jackalope plan --conf github-prod.edn --milestone-number 225
+```
 
 __sweep__  For use at the end of a sprint. Sweeps tickets from one milestone to the next.
 requires --conf
 requires a --milestone-title or a --milestone-number
 supports --preview
 
+Examples:
+```
+jackalope sweep --conf github-prod.edn --milestone-number 225 --preview
+jackalope sweep --conf github-prod.edn --milestone-number 225
+```
+
 __retrospective__  For use at the end of a sprint. Creates a simple HTML file with sprint outcomes.
 requires --conf
 requires a --milestone-title or a --milestone-number
 output will be a an HTML file named after the sprint's milestone, e.g.:
-  16.11.2.retrospective.html
+`16.11.2.retrospective.html`
 
-Example CLI calls, using Leiningen:
-lein run -- plan --conf github-prod.edn -n 225 --preview
-lein run -- plan --conf github-prod.edn -n 225
-lein run -- sweep --conf github-prod.edn -n 225
-lein run -- retrospective --conf github-prod.edn -n 225
+Example:
+```
+jackalope retrospective --conf github-prod.edn -n 225
 ```
 
 ## REPL based examples

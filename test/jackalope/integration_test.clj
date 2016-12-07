@@ -8,9 +8,9 @@
 ; 
 ; 1) A github-test.edn on the classpath, with access to a valid test account.
 ;    The file should look like:
-;    {:auth 'login:pwd' 
-;     :user 'MyOrg'
-;     :repo 'myrepo'}
+;    {:user 'MyOrg'
+;     :repo 'myrepo'
+;     :github-token 'long-github-token-generated-via-github-account-settings'}
 ;
 ; 2) An active repo named as specified by the :repo setting in (1)
 ;
@@ -185,5 +185,5 @@
 
 
 ;;
-;; Firefly is an American space western science fiction drama
+;; Firefly is the greatest American space western science fiction drama
 ;;

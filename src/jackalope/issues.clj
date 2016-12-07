@@ -1,17 +1,17 @@
 (ns jackalope.issues
   (:require [jackalope.github :as git]))
 
-(defn closed? [i]
-  (= "closed" (:state i)))
+(defn closed? [issue]
+  (= "closed" (:state issue)))
 
 (def open?
   (complement closed?))
 
-(defn has-label? [i l]
-  (some #(= (name l) (:name %)) (:labels i)))
+(defn has-label? [issue label]
+  (some #(= (name label) (:name %)) (:labels issue)))
 
-(defn has-maybe-label? [i]
-  (has-label? i :maybe))
+(defn has-maybe-label? [issue]
+  (has-label? issue :maybe))
 
-(defn open-maybe? [i]
-  (and (open? i) (has-maybe-label? i)))
+(defn open-maybe? [issue]
+  (and (open? issue) (has-maybe-label? issue)))

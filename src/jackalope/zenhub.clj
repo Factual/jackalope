@@ -3,7 +3,7 @@
             [clojure.data.json :as json]))
 
 (defn thro [e]
-  (throw (RuntimeException. (with-out-str (clojure.pprint/pprint e)))))
+  )
 
 (defn- get-pipelines-
   [token repo-id]
@@ -42,15 +42,13 @@
   (let [url (format "https://api.zenhub.io/p1/repositories/%s/board" repo-id)
         {:keys [status headers body error] :as resp}
         @(http/get url {:headers {"X-Authentication-Token" token}})]
-    (json/read-str body)
-    #_(if-not error
-        (do
-
-          ;;TODO: throw something meaningful. e.g., this can happen if bad token
-          ;;(assert (= status :ready)) 
-
-          (json/read-str body))
-        (thro error))))
+    (if-not error
+      ;;TODO: validate that we have a useful response? e.g., maybe (assert (= status :ready)) 
+      (json/read-str body)
+      ;;else, stop execution. i'm not sure of format for error string from 
+      ;;  Zenhub... punting by just str'ing it out
+      ;;TODO: throw something meaningful. e.g., this can happen if bad token
+      (throw (RuntimeException. (str error))))))
 
 (defn get-boards-keep [token repo-id issue-nums]
   (->> (get-boards token repo-id)

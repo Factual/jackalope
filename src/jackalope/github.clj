@@ -21,15 +21,15 @@
                                           (:status res#)
                                           (get-in res# [:body :message])))))))
 
-(defn create-issue [{:keys [user repo auth]} title ms-num]
-  (assure (issues/create-issue user repo title (merge {:auth auth 
+(defn create-issue [{:keys [user repo github-token]} title ms-num]
+  (assure (issues/create-issue user repo title (merge {:oauth-token github-token
                                                        :milestone ms-num}))))
 
-(defn for-issues
-  "Grooms issue data i for sending to Github API.
+(defn groom-for-github
+  "Grooms issue data for sending to Github API.
    Perhaps not strictly necessary."
-  [{:keys [user repo auth]} i]
-  (apply dissoc (merge {:auth auth} i)
+  [{:keys [user repo github-token]} issue]
+  (apply dissoc (merge {:oauth-token github-token} issue)
          ISSUE-KEY-BLACKLIST))
 
 (defn pull-request? [i]
@@ -37,9 +37,9 @@
 
 (defn fetch-issues-and-prs-by-milestone
   "Returns the issues assigned to the specified milestone"
-  [{:keys [user repo auth]} ms-num]
+  [{:keys [user repo github-token]} ms-num]
   (let [is (issues/issues user repo 
-                          {:auth      auth
+                          {:oauth-token github-token
                            :milestone ms-num
                            :state     "all"
                            :all-pages true})]
@@ -55,52 +55,50 @@
 
 (defn fetch-issues-by-milestone
   "Returns the issues assigned to the specified milestone, minus pull requests."
-  [auth ms-num]
+  [conn ms-num]
   (remove pull-request?
-          (fetch-issues-and-prs-by-milestone auth ms-num)))
+          (fetch-issues-and-prs-by-milestone conn ms-num)))
 
-(defn fetch-issues-by-nums [{:keys [user repo auth]} inums]
+(defn fetch-issues-by-nums [{:keys [user repo github-token]} inums]
   (doall (map (fn [inum]
-                (assure (issues/specific-issue user repo inum {:auth auth})))
+                (assure (issues/specific-issue user repo inum {:oauth-token github-token})))
               inums)))
 
-(defn edit-issue [{:keys [user repo auth] :as conn} edit]
-  (let [e (for-issues conn edit)]
+(defn edit-issue [{:keys [user repo] :as conn} edit]
+  (let [e (groom-for-github conn edit)]
     (assure (issues/edit-issue user repo (:number e) e))))
 
-(defn add-a-label [{:keys [user repo auth]} inum label]
-  (assure (issues/add-labels user repo inum [label] {:auth auth})))
+(defn add-a-label [{:keys [user repo github-token]} inum label]
+  (assure (issues/add-labels user repo inum [label] {:oauth-token github-token})))
 
 (defn remove-a-label
   "Removes the specified label from the specified issue.
    inum is the issue number.
    label is the label name, e.g. \"MyLabel\""
- [{:keys [user repo auth]} inum label]
-  (assure (issues/remove-label user repo inum (name label) {:auth auth})))
+ [{:keys [user repo github-token]} inum label]
+  (assure (issues/remove-label user repo inum (name label) {:oauth-token github-token})))
 
-(defn fetch-issue-events [{:keys [user repo auth]} inum]
-  (assure (issues/issue-events user repo inum {:auth auth})))
+(defn fetch-issue-events [{:keys [user repo github-token]} inum]
+  (assure (issues/issue-events user repo inum {:oauth-token github-token})))
 
-(defn get-milestone [{:keys [user repo auth]} ms-num]
-  (assure (issues/specific-milestone user repo ms-num {:auth auth})))
+(defn get-milestone [{:keys [user repo github-token]} ms-num]
+  (assure (issues/specific-milestone user repo ms-num {:oauth-token github-token})))
 
 ;; TODO: be sure to fetch *all* milestones and filter them
-(defn get-open-milestone-by-title [{:keys [user repo auth]} title]
-  (let [mss (issues/repo-milestones user repo {:auth auth :state :open})
+(defn get-open-milestone-by-title [{:keys [user repo github-token]} title]
+  (let [mss (issues/repo-milestones user repo {:oauth-token github-token :state :open})
         ms (first (filter #(= title (:title %)) mss))]
     (assert ms (str "Did not find an open milestone with title: " title))
     ms))
 
-(defn get-repo [{:keys [user repo auth]}]
+(defn get-repo [{:keys [user repo github-token]}]
   ;; doesn't seem to require a repo name; always returns the data for repo
-  (assure (repos/specific-repo user repo {:auth auth})))
+  (assure (repos/specific-repo user repo {:oauth-token github-token})))
 
 ;TODO! get this to work
 ; example that needs a working repo filter:
 ; (:total_count (search-issues CONN "geopulse" {}))
 ; also TODO: how to leave out keywords?
-(defn search-issues [{:keys [user repo auth]} keywords q]
-  (search/search-issues keywords q {:auth auth :all-pages true}))
+(defn search-issues [{:keys [user repo github-token]} keywords q]
+  (search/search-issues keywords q {:oauth-token github-token :all-pages true}))
 
-(defn search-hotfixes [auth]
-  (search-issues auth nil {:label "hotfix!"}))

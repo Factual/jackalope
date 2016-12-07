@@ -29,17 +29,6 @@
 (defn read-plan-from-edn [f]
   (read-string (slurp f)))
 
-(defn read-plan-from-tsv
-  "Reads TSV formatted and headered file tsvf and returns a plan.
-   A plan is a sequence of hash-maps where each hash-map
-   represents a decision from the plan, e.g.:
-     {:number 4841, :do? :yes}"
-  [f]
-  (map ->decision
-       (map 
-        #(str/split % #"\t")
-        (str/split (slurp f) #"\n"))))
-
 (defn read-plan [ms-title]
   (read-plan-from-edn (fname-edn ms-title)))
 
@@ -68,11 +57,7 @@
                (str/replace #"\s" "")
                str/lower-case
                keyword)
-           (map #(as-int (or
-                          ;; manual 'zh dumper' has 'id'
-                          ;; zenhub api has 'issue_number'
-                          (get % "id")
-                          (get % "issue_number")))
+           (map #(as-int (get % "issue_number"))
                 (get p "issues"))])))
 
 (defn read-plan-from-json
@@ -95,14 +80,6 @@
               :closed :yes  ;; TODO! this results in assigning the next milestone, even tho it's DONE
               :inscrutable)}))
    (read-issues-from-zenhub-json f)))
-
-(defn import-plan
-  "Reads the specified TSV (no header, please), converts to a Plan structure,
-   saves that structure to outf as EDN, returns the structure."
-  [tsvf outf]
-  (let [plan (read-plan-from-tsv tsvf)]
-    (spit outf (with-out-str (clojure.pprint/pprint plan)))
-    plan))
 
 (defn import-plan-from-json
   "Reads the specified plan as a JSON file converts to a Plan structure,

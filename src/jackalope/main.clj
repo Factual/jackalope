@@ -44,16 +44,37 @@
   [["-p" "--preview" "Show what would happen but don't actually do it"]
    ["-c" "--conf CONNF" "Configuration file (github auth)"
     :default core/DEFAULT-CONF
-    :validate [#(good-conf-file? %) "Must be a valid configuration file"]]
+    ;; side effect; caches github auth
+    :parse-fn #(core/github! %)]
    ["-m" "--milestone-title MILESTONE-TITLE"]
    ["-n" "--milestone-number MILESTONE-NUMBER"
     :parse-fn #(Integer/parseInt %)
-    :validate [#(< 0 % 65536) "Must be a valid milestone number"]]])
+    :validate [#(< 0 % 65536) "Must be a valid milestone number"]]
+   ["-h" "--help" "Show this help message"]])
 
-(defn print-stderr [errs]
-  (binding [*out* *err*]
-    (doseq [e errs]
-      (println e))))
+(defn exit [status msg]
+  (println msg)
+  (System/exit status))
+
+(defn usage [options-summary]
+  (->> ["This is the command line interface for Jackalope, an opinionated tool for Github tikcet management."
+        ""
+        "Usage: program-name [options] action"
+        ""
+        "Options:"
+        options-summary
+        ""
+        "Actions:"
+        "  plan            Finalize a plan"
+        "  sweep           Sweep a closing milestone"
+        "  retrospective   Create a retrospective report"
+        ""
+        "Please refer to the manual page for more information."]
+       (clojure.string/join \newline)))
+
+(defn error-msg [errors]
+  (str "The following errors occurred while parsing your command:\n\n"
+       (clojure.string/join \newline errors)))
 
 (defn good-opts
   "Validate and groom cli options:
@@ -64,6 +85,7 @@
   (assert (or milestone-title milestone-number) "You must indicate a milestone")
   (merge opts
          (when (not milestone-title)
+           ;;TODO: we don't always need this. i.e. and e.g., sweep! does not require a milestone title
            {:milestone-title
             (:title (core/get-milestone milestone-number))})
          (when (not milestone-number)
@@ -74,13 +96,14 @@
   "Runs a sweep of the specified milestone into the next milestone.
    Assumes the next milestone number is milestone + 1.
    If preview is true, prints out actions but does not run them."
-  [{:keys [milestone-number milestone-title preview]}]
+  [{:keys [milestone-number preview]}]
   (assert milestone-number)
-  (assert milestone-title)
   (let [milestone-next (inc milestone-number)
-        actions (core/sweep-milestone milestone-title milestone-next)]
+        actions (core/sweep-milestone milestone-number milestone-next)]
     (if preview
-      (doseq [a actions] (println a))
+      (do
+        (println "Sweep preview, " (count actions) " actions:")
+        (doseq [a actions] (println a)))
       (do
         (core/sweep! actions)
         (println (format "Swept %s issues into milestone %s" (count actions)
@@ -133,14 +156,15 @@
    "plan" plan!})
 
 (defn run [cmd opts]
-  (core/github! (:conf opts))
   (assert (contains? COMMAND-FNS cmd) "You must specify a valid action command")
+  (core/github! (:conf opts)) ;;TODO! why wasn't this handled while parsing? should refactor that for reliability/clarity!!
   ((get COMMAND-FNS cmd) (good-opts opts)))
 
 (defn -main
   [& args]
-  (let [opts (parse-opts args cli-options)]
-    (if-let [errs (:errors opts)]
-      (print-stderr errs)
-      (run (first args) (:options opts)))))
-
+  (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
+    (cond 
+      (not= (count arguments) 1) (exit 1 (usage summary))
+      (:help options) (exit 0 (usage summary))
+      errors (exit 1 (error-msg errors)))
+    (run (first args) options)))
