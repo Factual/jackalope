@@ -21,9 +21,22 @@
                                           (:status res#)
                                           (get-in res# [:body :message])))))))
 
-(defn create-issue [{:keys [user repo github-token]} title ms-num]
-  (assure (issues/create-issue user repo title (merge {:oauth-token github-token
-                                                       :milestone ms-num}))))
+(defn create-issue
+  "Creates a new issue withe specified title.
+
+   Possible option keys include:
+     :milestone :assignee :labels :body
+
+   Example call:
+     (create-issues CONN 'My Title' {:milestone 227})"
+  [{:keys [user repo github-token]} title options]
+  (assure (issues/create-issue user repo title
+                               (merge {:oauth-token github-token}
+                                      options))))
+
+(defn comment-on-issue [{:keys [user repo github-token]} issue body]
+  (assure (issues/create-comment user repo (:number issue) body
+                                 {:oauth-token github-token})))
 
 (defn groom-for-github
   "Grooms issue data for sending to Github API.
@@ -59,6 +72,9 @@
   (remove pull-request?
           (fetch-issues-and-prs-by-milestone conn ms-num)))
 
+(defn fetch-issue [{:keys [user repo github-token]} inum]
+  (assure (issues/specific-issue user repo inum {:oauth-token github-token})))
+
 (defn fetch-issues-by-nums [{:keys [user repo github-token]} inums]
   (doall (map (fn [inum]
                 (assure (issues/specific-issue user repo inum {:oauth-token github-token})))
@@ -67,6 +83,9 @@
 (defn edit-issue [{:keys [user repo] :as conn} edit]
   (let [e (groom-for-github conn edit)]
     (assure (issues/edit-issue user repo (:number e) e))))
+
+(defn close-issue [conn {:keys [number]}]
+  (edit-issue conn {:number number :state "closed"}))
 
 (defn add-a-label [{:keys [user repo github-token]} inum label]
   (assure (issues/add-labels user repo inum [label] {:oauth-token github-token})))
@@ -95,10 +114,30 @@
   ;; doesn't seem to require a repo name; always returns the data for repo
   (assure (repos/specific-repo user repo {:oauth-token github-token})))
 
+(defn fetch-comments [{:keys [user repo github-token]} issue]
+  (assure (issues/issue-comments user repo (:number issue) {:oauth-token github-token})))
+
 ;TODO! get this to work
 ; example that needs a working repo filter:
 ; (:total_count (search-issues CONN "geopulse" {}))
 ; also TODO: how to leave out keywords?
 (defn search-issues [{:keys [user repo github-token]} keywords q]
   (search/search-issues keywords q {:oauth-token github-token :all-pages true}))
+
+(defn fetch-open-issues
+  [{:keys [user repo github-token]}]
+  (let [is (issues/issues user repo 
+                          {:oauth-token github-token
+                           :state     "open"
+                           :all-pages true})]
+    ;; for some reason, this doesn't always return non-nil metadata, therefore
+    ;; not using (assure). Instead, assuming that a non map structure as the
+    ;; top-level results means that something is wrong with getting issues.
+    ;; TODO: the following ugly code is duplicative (see above)
+    (if-not (map? is)
+      (remove pull-request? is)
+      (throw (RuntimeException. (format "Bad result, status: %s. %s"
+                                        (:status is)
+                                        (str (get-in is [:body :message]) " "
+                                             (get-in is [:body :errors]))))))))
 

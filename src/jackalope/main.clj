@@ -42,7 +42,7 @@
 
 (def cli-options
   [["-p" "--preview" "Show what would happen but don't actually do it"]
-   ["-c" "--conf CONNF" "Configuration file (github auth)"
+   ["-c" "--conf CONF" "Configuration file (github auth)"
     :default core/DEFAULT-CONF
     ;; side effect; caches github auth
     :parse-fn #(core/github! %)]
@@ -157,7 +157,6 @@
 
 (defn run [cmd opts]
   (assert (contains? COMMAND-FNS cmd) "You must specify a valid action command")
-  (core/github! (:conf opts)) ;;TODO! why wasn't this handled while parsing? should refactor that for reliability/clarity!!
   ((get COMMAND-FNS cmd) (good-opts opts)))
 
 (defn -main
