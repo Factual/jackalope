@@ -12,7 +12,7 @@
 
 (defn github!
   "Sets your authentication with Github. If cred-file is supplied, reads from
-   that. Otherwise expects your credentials to be in resources/github.edn.
+   that. Otherwise expects your credentials to be in resources/[DEFUALT-CONF].
    Credentials should be like:
      {:user 'a_user_or_org'
       :repo 'a_repo'
