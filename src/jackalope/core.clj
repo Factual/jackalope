@@ -32,6 +32,9 @@
        (throw (IllegalArgumentException.
                "Github API credentials must be initialized using 'github!'"))))
 
+(defn zenhub? []
+  (get (github-conn) :zenhub-token))
+
 (defn set-milestone [issue ms-num]
   (github/edit-issue (github-conn) {:number (:number issue)
                                     :milestone ms-num}))
@@ -231,12 +234,30 @@
   (doseq [{:keys [number ms-num]} (filter (action= :assign-milestone) actions)]
     (assign-ms number ms-num)))
 
+(defn with-zenhub
+  "Decorates each issue with ZenHub metadata, e.g. whether each issue is an epic.
+   To each issue hash-map, adds:
+     :zenhub-epic?  [true or false]
+
+   Returns issues unchanged if we don't have zenhub credentials."
+  [issues]
+  (if (zenhub?)
+    (let [gc (github-conn)
+          zenhub-token (:zenhub-token gc)
+          repo-id (:id (github/get-repo gc))
+          ens (zenhub/get-epic-issue-nums zenhub-token repo-id)]
+      (map 
+       (fn [i]
+         (assoc i :zenhub-epic? (contains? ens (:number i))))
+       issues))
+    issues))
+
 (defn generate-retrospective-report
   "Generates a retrospective report, using the specified milestone and saved
    plan. Saves the report as HTML to a local file. Returns the filename."
   ([ms-num ms-title]
    (let [plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
-         issues (fetch-all-issues ms-num plan)]
+         issues (with-zenhub (fetch-all-issues ms-num plan))]
      (retro/generate-report plan issues ms-title))))
 
 (comment 
@@ -260,4 +281,5 @@
   ;;; be sure you really want to do this!
   ;;; (sweep! ACTIONS)
 )
+
 
