@@ -22,6 +22,9 @@
   (let [inums (into #{} inums)]
     (assoc boards "pipelines" (map (prune inums) (boards "pipelines")))))
 
+(defn blocked- [pipes]
+  (first (filter #(= "Blocked" (get % "name")) pipes)))
+
 (defn get-boards
   "Returns ZenHub board data for the specified repository. 
 
@@ -77,15 +80,16 @@
       (throw (RuntimeException. (str error))))))
 
 (defn get-epic-issue-nums
-  "Returns the set of epic issue numbers for the specified repo.
-
-"
+  "Returns the set of epic issue numbers for the specified repo."
   [token repo-id]
   (into #{} (map #(get % "issue_number") (get-epics token repo-id))))
 
-(defn blocked-issue-nums
+(defn get-blocked-issue-nums
+  "Returns the set of issue numbers of blocked issues (issues in the 'Blocked'
+   pipeline)."
   [token repo-id]
-  
-
-
-  )
+  (into #{} (map #(get % "issue_number")
+                 (-> (get-boards token repo-id)
+                     (get "pipelines")
+                     blocked
+                     (get "issues")))))

@@ -35,6 +35,8 @@
    returns :inscrutable if outcome could not be determined based on our rules"
   [issue]
   (cond
+    (and (i/open? issue)
+         (:zenhub-blocked? issue))          :blocked
     (and (i/closed? issue) (yes? issue))     :done-as-planned
     (and (i/closed? issue) (maybe? issue))   :done-as-maybe
     (and (i/open? issue) (maybe? issue)
@@ -109,7 +111,8 @@
   [[:done-as-planned "Completed Planned Yes"]
    [:done-as-maybe   "Completed Planned Maybe"]
    [:late-add        "Completed Unplanned (Late Adds)"]
-   [:incomplete      "Incomplete Planned Yes"]])
+   [:incomplete      "Incomplete Planned Yes"]
+   [:blocked         "Blocked"]])
 
 (defn counts-hic [retro]
   [:table

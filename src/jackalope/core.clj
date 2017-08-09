@@ -237,18 +237,21 @@
 (defn with-zenhub
   "Decorates each issue with ZenHub metadata, e.g. whether each issue is an epic.
    To each issue hash-map, adds:
-     :zenhub-epic?  [true or false]
-
+     :zenhub-epic?     [true iff the issue is a ZenHub epic]
+     :zenhub-blocked?  [true iff the issue is in the ZenHub 'Blocked' pipeline]
    Returns issues unchanged if we don't have zenhub credentials."
   [issues]
   (if (zenhub?)
     (let [gc (github-conn)
           zenhub-token (:zenhub-token gc)
           repo-id (:id (github/get-repo gc))
-          ens (zenhub/get-epic-issue-nums zenhub-token repo-id)]
+          ens (zenhub/get-epic-issue-nums zenhub-token repo-id)
+          bls (zenhub/get-blocked-issue-nums zenhub-token repo-id)]
       (map 
        (fn [i]
-         (assoc i :zenhub-epic? (contains? ens (:number i))))
+         (assoc i
+                :zenhub-epic? (contains? ens (:number i))
+                :zenhub-blocked? (contains? bls (:number i))))
        issues))
     issues))
 
