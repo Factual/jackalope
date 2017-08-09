@@ -15,3 +15,9 @@
 
 (defn open-maybe? [issue]
   (and (open? issue) (has-maybe-label? issue)))
+
+(defn assignee [issue]
+  (:login (:assignee issue)))
+
+(defn creator [issue]
+  (:login (:user issue)))

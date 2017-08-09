@@ -35,14 +35,16 @@
    returns :inscrutable if outcome could not be determined based on our rules"
   [issue]
   (cond
-   (and (i/closed? issue) (yes? issue))     :done-as-planned
-   (and (i/closed? issue) (maybe? issue))   :done-as-maybe
-   (and (i/open? issue) (maybe? issue))     :not-done-maybe
-   (and (nil? (:do? issue))
-        (i/closed? issue))                  :late-add
-   (and (i/open? issue) (no? issue))        :skipped-as-no
-   (and (i/open? issue) (yes? issue))       :incomplete
-   :else :inscrutable))
+    (and (i/closed? issue) (yes? issue))     :done-as-planned
+    (and (i/closed? issue) (maybe? issue))   :done-as-maybe
+    (and (i/open? issue) (maybe? issue)
+         (not (:zenhub-epic? issue)))        :not-done-maybe
+    (and (nil? (:do? issue))
+         (i/closed? issue))                  :late-add
+    (and (i/open? issue) (no? issue))        :skipped-as-no
+    (and (i/open? issue) (yes? issue)
+         (not (:zenhub-epic? issue)))        :incomplete
+    :else :inscrutable))
 
 (defn +outcome [issue]
   (assoc issue :outcome (outcome issue)))
@@ -92,7 +94,7 @@
             (str issues-url "/" (:number i))}
            (:number i)]]
          [:td (get-in i [:assignee :login])]
-         [:td (:title i)]
+         [:td (:title i) (when (:zenhub-epic? i) [:i " (epic)"])]
          [:td (get-in i [:milestone :title])]]))]))
 
 (defn section-hic [issues heading]

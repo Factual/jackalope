@@ -76,6 +76,8 @@
               :maybe :maybe
               :todo :yes
               :inprogress :yes
+              :blocked :yes
+              :inreview :yes
               :pending :yes
               :closed :yes  ;; TODO! this results in assigning the next milestone, even tho it's DONE
               :inscrutable)}))
