@@ -41,6 +41,7 @@
         @(http/get url {:headers {"X-Authentication-Token" token}})]
     (if-not error
       ;;TODO: validate that we have a useful response? e.g., maybe (assert (= status :ready)) 
+      ;;TODO: standardize on whether to drill down before returning (see get-epics)
       (json/read-str body)
       ;;else, stop execution. i'm not sure of format for error string from 
       ;;  Zenhub... punting by just str'ing it out
@@ -69,6 +70,7 @@
         @(http/get url {:headers {"X-Authentication-Token" token}})]
     (if-not error
       ;;TODO: validate that we have a useful response? e.g., maybe (assert (= status :ready)) 
+      ;;TODO: standardize on whether to drill down before returning (see get-boards)
       (get (json/read-str body) "epic_issues")
       ;;else, stop execution. i'm not sure of format for error string from 
       ;;  Zenhub... punting by just str'ing it out
@@ -83,3 +85,4 @@
    (it's *not* the human readable repo name)"
   [token repo-id]
   (into #{} (map #(get % "issue_number") (get-epics token repo-id))))
+
