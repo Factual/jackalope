@@ -2,6 +2,13 @@
   (:require [org.httpkit.client :as http]
             [clojure.data.json :as json]))
 
+;
+; Where functions take a repo-id, it's the underlying github repo id, like:
+; 1800123
+; (it's *not* the human readable repo name)
+;
+
+
 (defn keep-nums [is inums]
   (filter 
    (fn [x]
@@ -17,10 +24,6 @@
 
 (defn get-boards
   "Returns ZenHub board data for the specified repository. 
-
-   repo-id is the underlying github repo-id, like:
-   1800123
-   (it's *not* the human readable repo name)
 
    Returned hash-map is like:
      'pipelines'  [PIPELINES]
@@ -55,10 +58,6 @@
 (defn get-epics 
   "Returns metadata for ZenHub epics in the specified repository.
 
-   repo-id is the underlying github repo-id, like:
-   1800123
-   (it's *not* the human readable repo name)
-
    Returns a collection of hash-maps where each hash-map represents an epic and
    looks like:
      'issue_number'  [ISSUE_NUMBER]
@@ -80,9 +79,13 @@
 (defn get-epic-issue-nums
   "Returns the set of epic issue numbers for the specified repo.
 
-   repo-id is the underlying github repo-id, like:
-   1800123
-   (it's *not* the human readable repo name)"
+"
   [token repo-id]
   (into #{} (map #(get % "issue_number") (get-epics token repo-id))))
 
+(defn blocked-issue-nums
+  [token repo-id]
+  
+
+
+  )
