@@ -22,7 +22,7 @@
                                           (get-in res# [:body :message])))))))
 
 (defn create-issue
-  "Creates a new issue withe specified title.
+  "Creates a new issue with the specified title.
 
    Possible option keys include:
      :milestone :assignee :labels :body

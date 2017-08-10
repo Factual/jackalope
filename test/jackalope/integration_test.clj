@@ -33,7 +33,7 @@
        (rand-int 1000)))
 
 (defn create-test-issue [ms-num]
-  (github/create-issue (github-conn) (rand-title) ms-num))
+  (github/create-issue (github-conn) (rand-title) {:milestone ms-num}))
 
 (defn create-test-issues
   "Creates n new issues, assigned to the milestone ms-num.
