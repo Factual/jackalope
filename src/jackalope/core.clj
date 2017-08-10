@@ -245,7 +245,7 @@
     (let [gc (github-conn)
           zenhub-token (:zenhub-token gc)
           repo-id (:id (github/get-repo gc))]
-      (map zenhub/++ issues))))
+      (zenhub/++ zenhub-token repo-id issues))))
 
 (defn generate-retrospective-report
   "Generates a retrospective report, using the specified milestone and saved
