@@ -1,5 +1,6 @@
 (ns jackalope.retrospective
   (:require [jackalope.issues :as i]
+            [jackalope.zenhub :as zh]
             [clojure.string :as str]
             [hiccup.core :as hic]))
 
@@ -25,6 +26,7 @@
    The outcome is chosen based on the issue's :do? decision and :state.
 
    Potential outcomes are:
+     :blocked
      :done-as-planned
      :done-as-maybe
      :not-done-maybe
@@ -36,20 +38,29 @@
   [issue]
   (cond
     (and (i/open? issue)
-         (:zenhub-blocked? issue))          :blocked
+         (zh/blocked? issue))                :blocked
     (and (i/closed? issue) (yes? issue))     :done-as-planned
     (and (i/closed? issue) (maybe? issue))   :done-as-maybe
     (and (i/open? issue) (maybe? issue)
-         (not (:zenhub-epic? issue)))        :not-done-maybe
+         (not (zh/epic? issue)))             :not-done-maybe
     (and (nil? (:do? issue))
          (i/closed? issue))                  :late-add
     (and (i/open? issue) (no? issue))        :skipped-as-no
     (and (i/open? issue) (yes? issue)
-         (not (:zenhub-epic? issue)))        :incomplete
-    :else :inscrutable))
+         (not (zh/epic? issue)))             :incomplete
+    :else                                    :inscrutable))
 
 (defn +outcome [issue]
   (assoc issue :outcome (outcome issue)))
+
+(defn +downgraded?
+  "decorates the issue with :downgraded=>true iff the outcome was :incomplete and
+   the issue was changed during the sprint from an original 'yes' to 'maybe' or
+   'no'"
+  [issue]
+  (if (and (= :incomplete (:outcome issue)) (i/open? issue) (zh/maybe? issue))
+    (assoc issue :downgraded? true)
+    issue))
 
 (defn retrospective
   "Returns a hash-map organized by outcome, where each key is a defined outcome
@@ -72,6 +83,7 @@
         issues (map #(+do? % ndx) issues)]
     (->> issues
          (map +outcome)
+         (map +downgraded?)
          (group-by :outcome))))
 
 (defn issues-url [sample-issue]
@@ -96,7 +108,9 @@
             (str issues-url "/" (:number i))}
            (:number i)]]
          [:td (get-in i [:assignee :login])]
-         [:td (:title i) (when (:zenhub-epic? i) [:i " (epic)"])]
+         [:td (:title i)
+          (when (zh/epic? i) [:i " (epic)"])
+          (when (:downgraded? i) [:i (str " (downgraded to maybe)")])]
          [:td (get-in i [:milestone :title])]]))]))
 
 (defn section-hic [issues heading]

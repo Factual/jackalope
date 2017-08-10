@@ -3,7 +3,7 @@
             [clojure.data.json :as json]))
 
 ;
-; Where functions take a repo-id, it's the underlying github repo id, like:
+; Wherever functions take a repo-id, it's the underlying github repo id, like:
 ; 1800123
 ; (it's *not* the human readable repo name)
 ;
@@ -22,9 +22,6 @@
   (let [inums (into #{} inums)]
     (assoc boards "pipelines" (map (prune inums) (boards "pipelines")))))
 
-(defn blocked- [pipes]
-  (first (filter #(= "Blocked" (get % "name")) pipes)))
-
 (defn get-boards
   "Returns ZenHub board data for the specified repository. 
 
@@ -32,7 +29,7 @@
      'pipelines'  [PIPELINES]
 
    PIPELINES is a collection of hash-maps, one for each pipeline in the board.
-   Each pipepline hash-map is like:
+   Each pipeline hash-map is like:
      'name'   [NAME, e.g. 'To Do']
      'issues' [ISSUES]
 
@@ -47,7 +44,6 @@
         @(http/get url {:headers {"X-Authentication-Token" token}})]
     (if-not error
       ;;TODO: validate that we have a useful response? e.g., maybe (assert (= status :ready)) 
-      ;;TODO: standardize on whether to drill down before returning (see get-epics)
       (json/read-str body)
       ;;else, stop execution. i'm not sure of format for error string from 
       ;;  Zenhub... punting by just str'ing it out
@@ -57,6 +53,20 @@
 (defn get-boards-keep [token repo-id issue-nums]
   (->> (get-boards token repo-id)
       (keep-in-boards issue-nums)))
+
+(defn issue-nums->pipeline
+  "Transforms ZenHub boards data into a lookup hash-map where keys are the issue
+   numbers and values are the pipeline names, e.g.:
+     {10282 'Nominated'
+      8161 'In Review'
+      9512 'Blocked'
+      ...}"
+  [boards]
+  (apply assoc {}
+         (mapcat #(interleave
+                   (map (fn [i] (get i "issue_number")) (get % "issues"))
+                   (repeat (get % "name")))
+                 (get boards "pipelines"))))
 
 (defn get-epics 
   "Returns metadata for ZenHub epics in the specified repository.
@@ -72,8 +82,7 @@
         @(http/get url {:headers {"X-Authentication-Token" token}})]
     (if-not error
       ;;TODO: validate that we have a useful response? e.g., maybe (assert (= status :ready)) 
-      ;;TODO: standardize on whether to drill down before returning (see get-boards)
-      (get (json/read-str body) "epic_issues")
+      (json/read-str body)
       ;;else, stop execution. i'm not sure of format for error string from 
       ;;  Zenhub... punting by just str'ing it out
       ;;TODO: throw something meaningful. e.g., this can happen if bad token
@@ -82,14 +91,32 @@
 (defn get-epic-issue-nums
   "Returns the set of epic issue numbers for the specified repo."
   [token repo-id]
-  (into #{} (map #(get % "issue_number") (get-epics token repo-id))))
-
-(defn get-blocked-issue-nums
-  "Returns the set of issue numbers of blocked issues (issues in the 'Blocked'
-   pipeline)."
-  [token repo-id]
   (into #{} (map #(get % "issue_number")
-                 (-> (get-boards token repo-id)
-                     (get "pipelines")
-                     blocked
-                     (get "issues")))))
+                 (get (get-epics token repo-id) "epic_issues"))))
+
+(defn +pipeline [n->p issue]
+  (assoc issue :zenhub-pipeline (n->p (:number issue))))
+
+(defn +epic? [ens issue]
+  (assoc issue
+         :zenhub-epic? (contains? ens (:number issue))))
+
+(defn ++
+  "Decorates each issue with ZenHub metadata. Adds key/value pairs to each 
+   issue in issues:
+     :zenhub-epic?     [true iff the issue is a ZenHub epic]
+     :zenhub-pipeline  [name of associated pipeline, if any. E.g., 'Blocked']"
+  [token repo-id issues]
+  (let [boards (get-boards-keep token repo-id (map :number issues))
+        n->p   (issue-nums->pipeline boards)
+        ens    (get-epic-issue-nums token repo-id)]
+    (map (comp (partial +pipeline n->p) (partial +epic? ens)) issues)))
+
+(defn epic? [i]
+  (:zenhub-epic? i))
+
+(defn blocked? [i]
+  (= "Blocked" (:zenhub-pipeline i)))
+
+(defn maybe? [i]
+  (= "Maybe" (:zenhub-pipeline i)))

@@ -244,22 +244,15 @@
   (if (zenhub?)
     (let [gc (github-conn)
           zenhub-token (:zenhub-token gc)
-          repo-id (:id (github/get-repo gc))
-          ens (zenhub/get-epic-issue-nums zenhub-token repo-id)
-          bls (zenhub/get-blocked-issue-nums zenhub-token repo-id)]
-      (map 
-       (fn [i]
-         (assoc i
-                :zenhub-epic? (contains? ens (:number i))
-                :zenhub-blocked? (contains? bls (:number i))))
-       issues))
-    issues))
+          repo-id (:id (github/get-repo gc))]
+      (map zenhub/++ issues))))
 
 (defn generate-retrospective-report
   "Generates a retrospective report, using the specified milestone and saved
    plan. Saves the report as HTML to a local file. Returns the filename."
   ([ms-num ms-title]
-   (let [plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
+   (let [repo-id (:id (github/get-repo (github-conn)))
+         plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
          issues (with-zenhub (fetch-all-issues ms-num plan))]
      (retro/generate-report plan issues ms-title))))
 
