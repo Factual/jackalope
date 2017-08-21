@@ -1,5 +1,6 @@
 (ns jackalope.zenhub
   (:require [org.httpkit.client :as http]
+            [clojure.string :as str]
             [clojure.data.json :as json]))
 
 ;
@@ -120,3 +121,56 @@
 
 (defn maybe? [i]
   (= "Maybe" (:zenhub-pipeline i)))
+
+
+;
+; Conversions from ZenHub's format to ours
+;
+
+(defn as-int [v]
+  (Integer/parseInt (str v)))
+
+(defn groom-pipelines
+  "Reads in the raw JSON exported from ZenHub. Expects ZenHub's format.
+
+   Returns a hash-map where keys are the pipelines and values are a collection of issue 
+   numbers, representing the issues in that pipeline. Like:
+     :nominated  [numbers for the issues still nominated, so those are a 'no']
+     :maybe      [numbers for the issues identified as Maybes]
+     :todo       [numbers for the issues selected as yes]
+     :inprogress [numbers for the issues already being worked on]
+     :pending    [numbers for the issues being worked on but maybe blocked]
+     :closed     [numbers for the issues that are already done]"
+  [j]
+  (into {}
+        (for [p (get j "pipelines")]
+          [(-> (get p "name") 
+               (str/replace #"\s" "")
+               str/lower-case
+               keyword)
+           (map #(as-int (get % "issue_number"))
+                (get p "issues"))])))
+
+(defn as-plan
+  "Takes boards data and converts to a concise plan structure; returns a
+   collection of hash-maps where each hash-map represents an issue and its
+   decision in the plan.
+
+   Example hash-map in the collection:
+   {:number 6279, :do? :no}"
+  [boards]
+  (mapcat
+   (fn [[p nums]]
+    (for [n nums]
+      {:number n
+       :do? (case p
+              :nominated :no
+              :maybe :maybe
+              :todo :yes
+              :inprogress :yes
+              :blocked :yes
+              :inreview :yes
+              :pending :yes
+              :closed :yes  ;; TODO! this results in assigning the next milestone, even tho it's DONE
+              :inscrutable)}))
+   (groom-pipelines boards)))

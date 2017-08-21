@@ -17,6 +17,8 @@
 ; 3) A milestone with id 1 in the active specified repo from (1) and clearance
 ;    to create and manage tickets in that repo and assigned to that milestone
 
+; TODO: close tickets when tests are done (a.k.a., cleanup). 
+;       or, create new repo for each test run then tear it down
 
 (def CONF "github-test.edn")
 (def MILESTONE-A 1)
@@ -128,6 +130,7 @@
 
     ;; -- Verify actions --
     ;; Issue A -- unmaybe'd and swept forward
+    ;; TODO: update & test
     (comment
       (is (unmaybed-act? acts (:number a)))
       (is (milestoned-act? acts (:number a) MILESTONE-B))

@@ -26,18 +26,19 @@
    The outcome is chosen based on the issue's :do? decision and :state.
 
    Potential outcomes are:
-     :blocked
-     :done-as-planned
-     :done-as-maybe
+     :blocked          the issue was blocked during the sprint
+     :done-as-planned  the plan said yes and the issue was completed
+     :done-as-maybe    the plan said maybe and the issue was completed
      :not-done-maybe
-     :late-add
+     :late-add         wasn't included in the plan, but was completed 
+                       (e.g., late-add or hotfix)
      :skipped-as-no
-     :incomplete
+     :incomplete       the plan said yes but the issue was not completed
 
    returns :inscrutable if outcome could not be determined based on our rules"
   [issue]
   (cond
-    (and (i/open? issue)
+    (and (i/open? issue) (not (no? issue))
          (zh/blocked? issue))                :blocked
     (and (i/closed? issue) (yes? issue))     :done-as-planned
     (and (i/closed? issue) (maybe? issue))   :done-as-maybe
@@ -64,18 +65,12 @@
 
 (defn retrospective
   "Returns a hash-map organized by outcome, where each key is a defined outcome
-   and each value is a collection of issues that saw that outcome. Outcomes:
+   and each value is a collection of issues that saw that outcome.
+   (For more details on possible outcomes, see the outcome functionality above.)
 
-     :done-as-planned  the plan said yes and the issue was completed
-     :done-as-maybe    the plan said maybe and the issue was completed
-     :incomplete       the plan said yes but the issue was not completed
-     :late-add         wasn't included in the plan, but was completed 
-                       (e.g., late-add or hotfix)
+   plan must be a valid representation of a sprint plan.
 
-   argument must be a hash-map with :plan and :issues, representing the raw
-   data required for a retrospective.
-
-   :issues must be an up-to-date collection of all issues currently associated
+   issues must be an up-to-date collection of all issues currently associated
    to the milestone. this is the issue data that will be compared against the
    plan to determine outcome."
   [plan issues]
@@ -161,3 +156,21 @@
 (defn generate-report [plan issues ms-title]
   (let [retro  (retrospective plan issues)]
     (make-retrospective-file retro ms-title)))
+
+; TODO: this code makes my eyes bleed
+(defn generate-report-as-markdown [retro]
+  (apply str (for [[k v] OUTCOMES]
+               (apply str
+                      "\n__" v ":__\n\n"
+                      (if-let [issues (retro k)]
+                        (apply str 
+                               "#|Estimate|Assignee|Title\n"
+                               "---|---|---|---\n"
+                               (for [i issues]
+                                 (str "#"(:number i) "|" (:estimate i) "|"
+                                      (:login (:assignee i)) "|" (:title i) "\n")))
+                        "_(none)_\n\n")))))
+
+(defn report-as-markdown [plan issues]
+  (generate-report-as-markdown
+   (retrospective plan issues)))

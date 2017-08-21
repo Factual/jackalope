@@ -96,8 +96,18 @@
 (defn get-open-milestone-by-title [ms-title]
   (github/get-open-milestone-by-title (github-conn) ms-title))
 
+(defn fetch-boards
+  "Fetches the plan data for the specified milestone, by talking to GitHub and
+   ZenHub. Returns the ZenHub boards data that represents the plan."
+  [ms-num]
+  (let [{:keys [repo zenhub-token] :as gc} (github-conn)
+        repo-id (:id (github/get-repo gc))
+        issue-nums (map :number (github/fetch-issues-by-milestone
+                                 (github-conn) ms-num))]
+    (zenhub/get-boards-keep zenhub-token repo-id issue-nums)))
 
-
+(defn fetch-plan-from-zenhub [ms-num]
+  (zenhub/as-plan (fetch-boards ms-num)))
 
 ;;
 ;; Main use cases
@@ -112,10 +122,7 @@
       :plan      [PLAN (as a structure)]"
   [ms-num ms-title]
   (let [{:keys [repo zenhub-token] :as gc} (github-conn)
-        repo-id (:id (github/get-repo gc))
-        issue-nums (map :number (github/fetch-issues-by-milestone
-                                 (github-conn) ms-num))
-        boards (zenhub/get-boards-keep zenhub-token repo-id issue-nums)] 
+        boards (fetch-boards ms-num)] 
     (pst/save-plan-from-zenhub ms-title boards)))
 
 (defn plan* [plan ms-curr ms-next]
@@ -167,12 +174,13 @@
       (github/add-a-label conn n :maybe))
     eds))
 
+; TODO: support auto-gen of next milestone; stop asking for ms-next
 (defn sweep-milestone
   "Given the current milestone id ms-curr and the next milestone id ms-next,
    returns action descriptions that will treat ms-curr as done and 'sweep'
    it into ms-next. The actions are not performed; this function only
-   *describes* the actions as a proposal. (The sweep! function will perform the 
-   actions)
+   *describes* the actions as a proposal. (The sweep! function will
+   perform the actions)
 
    The actions described will:
    1) clear 'maybe' labels from the issues in milestone ms-curr
@@ -247,14 +255,113 @@
           repo-id (:id (github/get-repo gc))]
       (zenhub/++ zenhub-token repo-id issues))))
 
+;; TODO: this goes away once we have in-repo management of plans
 (defn generate-retrospective-report
   "Generates a retrospective report, using the specified milestone and saved
    plan. Saves the report as HTML to a local file. Returns the filename."
   ([ms-num ms-title]
-   (let [repo-id (:id (github/get-repo (github-conn)))
-         plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
+   (let [plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
          issues (with-zenhub (fetch-all-issues ms-num plan))]
      (retro/generate-report plan issues ms-title))))
+
+(defn retro-as-markdown-table [milestone plan]
+  (let [issues (with-zenhub (fetch-all-issues (:number milestone) plan))]
+    (retro/report-as-markdown plan issues)))
+
+(defn ->mkd-row [{:keys [number title]}]
+  (format "| #%s | %s |\n" number title))
+
+(defn ->mkd-table [plan do?]
+  (str
+         "| Number | Title |\n"
+         "| ------------- | ------------- |\n"
+         (apply str (map ->mkd-row (sort-by :number (filter #(= do? (:do? %)) plan))))))
+
+(defn plan->github-markdown-table
+  "Returns the specific plan, formatted as a table in GitHub markdown
+   (presumably, to be posted as an issue comment)."
+  [plan]
+  (str
+         "__Yes:__\n\n"
+         (->mkd-table plan :yes)
+         "\n\n"
+         "__Maybe:__\n\n"
+         (->mkd-table plan :maybe)))
+
+(defn plan->ms-desc [plan]
+  (format "<!--PLAN %s -->" (pr-str plan)))
+
+(defn ms-desc->plan [s]
+  (read-string
+   (subs s 9 (- (count s) 4))))
+
+(defn do-sprint-start!
+  "Handles a request to start a sprint, as specified in issue. The issue must
+   already be assigned a valid Milestone.
+
+   Performs these steps:
+   * Fetches the sprint plan from GitHub/ZenHub (using the Milestone)
+   * Writes a comment to the issue, showing the plan as a table
+   * Sets the Milestone's description to contain the plan data
+   * Closes the issue"
+  ;;TODO: don't destructively reset the Milestone's description.
+  ;;      maybe fetch the desc and append? (requires careful handling)
+  [issue]
+  (let [ms (:milestone issue)
+        ms-num (:number ms)
+        ms-title (:title ms)
+        plan (fetch-plan-from-zenhub ms-num)
+        plan-tbl (plan->github-markdown-table plan)
+        plan-str (plan->ms-desc plan)]
+    (github/comment-on-issue (github-conn) issue plan-tbl)
+    (github/set-milestone-desc (github-conn) ms-num ms-title plan-str)
+    (github/close-issue (github-conn) issue)
+    plan))
+
+(defn do-sprint-stop! [issue]
+  (let [ms-num (get-in issue [:milestone :number])
+        ms (github/fetch-milestone (github-conn) ms-num)
+        plan (-> ms
+                 :description
+                 ms-desc->plan)
+        actions (sweep-milestone ms-num (inc ms-num))]
+    (sweep! actions)
+    (github/comment-on-issue (github-conn) issue
+                             (retro-as-markdown-table ms plan))
+    (github/close-issue (github-conn) issue)
+    actions))
+
+(defn find-work
+  "Queries GitHub for assigned work that should be handled.
+   Returns a hash-map like:
+     :start  [collection of sprint start issues]
+     :end    [collection of sprint end issues]"
+  ;; TODO: isn't it weird to handle >1 starts, >1 stops?
+  ;;       maybe introduce some logical enforcement of one at a time?
+  [assignee]
+  (merge
+   (when-let [starts (:items (github/search-issues-assigned (github-conn)
+                                                            assignee "start"))]
+     {:start starts})
+   (when-let [stops (:items (github/search-issues-assigned (github-conn)
+                                                           assignee "stop"))]
+     {:stop stops})))
+
+(defn check-sprint [assignee]
+  (let [work-issues (find-work assignee)]
+    (doseq [i (:start work-issues)]
+      (do-sprint-start! i)
+      (println (format "Did a Sprint Start (#%s) by %s" (:number i) assignee)))
+    (doseq [i (:stop work-issues)]
+      (do-sprint-stop! i)
+      (println (format "Did a Sprint Stop (#%s) by %s" (:number i) assignee)))))
+
+(defn work-loop [assignee]
+  (println "Work loop for" assignee)
+  (loop []
+      (check-sprint assignee)
+      (Thread/sleep 5000)
+      (recur)))
 
 (comment 
   ;; Example of importing and finalizing a plan

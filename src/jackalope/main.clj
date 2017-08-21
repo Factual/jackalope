@@ -50,6 +50,7 @@
    ["-n" "--milestone-number MILESTONE-NUMBER"
     :parse-fn #(Integer/parseInt %)
     :validate [#(< 0 % 65536) "Must be a valid milestone number"]]
+   ["-a" "--assignee ASSIGNEE"]
    ["-h" "--help" "Show this help message"]])
 
 (defn exit [status msg]
@@ -57,7 +58,7 @@
   (System/exit status))
 
 (defn usage [options-summary]
-  (->> ["This is the command line interface for Jackalope, an opinionated tool for Github tikcet management."
+  (->> ["This is the command line interface for Jackalope, an opinionated tool for Github ticket management."
         ""
         "Usage: program-name [options] action"
         ""
@@ -68,6 +69,8 @@
         "  plan            Finalize a plan"
         "  sweep           Sweep a closing milestone"
         "  retrospective   Create a retrospective report"
+        "  check-sprint    Perform a check for sprint related work; do the work"
+        "  loop            Run the main work loop, forever"
         ""
         "Please refer to the manual page for more information."]
        (clojure.string/join \newline)))
@@ -98,8 +101,8 @@
    If preview is true, prints out actions but does not run them."
   [{:keys [milestone-number preview]}]
   (assert milestone-number)
-  (let [milestone-next (inc milestone-number)
-        actions (core/sweep-milestone milestone-number milestone-next)]
+  (let [ms-next (inc milestone-number)
+        actions (core/sweep-milestone milestone-number ms-next)]
     (if preview
       (do
         (println "Sweep preview, " (count actions) " actions:")
@@ -107,7 +110,7 @@
       (do
         (core/sweep! actions)
         (println (format "Swept %s issues into milestone %s" (count actions)
-                         milestone-next))))))
+                         ms-next))))))
 
 (defn generate-retrospective-report
   "Assumes a local plan file name '[milestone title].plan.edn'"
@@ -153,7 +156,9 @@
 (def COMMAND-FNS 
   {"sweep" sweep!
    "retrospective" generate-retrospective-report
-   "plan" plan!})
+   "plan" plan!
+   "check-sprint" core/check-sprint
+   "loop" core/work-loop})
 
 (defn run [cmd opts]
   (assert (contains? COMMAND-FNS cmd) "You must specify a valid action command")

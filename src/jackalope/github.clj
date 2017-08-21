@@ -124,6 +124,15 @@
 (defn search-issues [{:keys [user repo github-token]} keywords q]
   (search/search-issues keywords q {:oauth-token github-token :all-pages true}))
 
+(defn search-issues-assigned
+  [{:keys [user repo github-token]} assignee title-search]
+  (assure (search/search-issues title-search
+                                {:type "issue"
+                                 :in "title"
+                                 :state "open"
+                                 :assignee assignee}
+                                {:oauth-token github-token :all-pages true})))
+
 (defn fetch-open-issues
   [{:keys [user repo github-token]}]
   (let [is (issues/issues user repo 
@@ -140,3 +149,10 @@
                                         (:status is)
                                         (str (get-in is [:body :message]) " "
                                              (get-in is [:body :errors]))))))))
+
+(defn fetch-milestone [{:keys [user repo github-token]} ms-num]
+  (assure (issues/specific-milestone user repo ms-num {:oauth-token github-token})))
+
+(defn set-milestone-desc [{:keys [user repo github-token]} ms-num ms-title desc]
+  (assure (issues/edit-milestone user repo ms-num ms-title {:oauth-token github-token
+                                                            :description desc})))
