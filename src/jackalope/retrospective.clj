@@ -13,6 +13,9 @@
 (defn maybe? [i]
   (= :maybe (:do? i)))
 
+(defn login [i]
+  (get-in i [:assignee :login]))
+
 (defn number->do?-ndx
   "Returns an index (as a hash-map) of issue number to :do?"
   [plan]
@@ -95,14 +98,14 @@
     {:style "border: 0; width: 90%"}
     [:tr {:align "left"} [:th "#"] [:th "assignee"] [:th "title"] [:th "milestone"]]
     (let [issues-url (issues-url (first issues))]
-      (for [i (sort-by #(get-in % [:assignee :login]) issues)]
+      (for [i (sort-by login issues)]
         [:tr
          [:td
           [:a
            {:href
             (str issues-url "/" (:number i))}
            (:number i)]]
-         [:td (get-in i [:assignee :login])]
+         [:td (login i)]
          [:td (:title i)
           (when (zh/epic? i) [:i " (epic)"])
           (when (:downgraded? i) [:i (str " (downgraded to maybe)")])]
@@ -166,9 +169,9 @@
                         (apply str 
                                "#|Estimate|Assignee|Title\n"
                                "---|---|---|---\n"
-                               (for [i issues]
+                               (for [i (sort-by login issues)]
                                  (str "#"(:number i) "|" (:estimate i) "|"
-                                      (:login (:assignee i)) "|" (:title i) "\n")))
+                                      (login i) "|" (:title i) "\n")))
                         "_(none)_\n\n")))))
 
 (defn report-as-markdown [plan issues]

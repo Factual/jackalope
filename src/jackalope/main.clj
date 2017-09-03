@@ -142,6 +142,15 @@
         (core/plan! plan milestone-number (inc milestone-number))
         (println (format "Finalized plan for %s (%s)" milestone-title milestone-number))))))
 
+(defn check-sprint [{:keys [assignee]}]
+  (core/check-sprint assignee))
+
+(defn watch [{:keys [assignee] :as opts}]
+  (println "watching...")
+  (check-sprint opts)
+  (Thread/sleep 5000)
+  (recur opts))
+
 (comment
   ;; Example call to plan!, preview mode:
   (plan! {:preview true
@@ -152,13 +161,13 @@
   (plan! {:milestone-number 219
           :milestone-title "16.09.1"}))
 
-
 (def COMMAND-FNS 
   {"sweep" sweep!
    "retrospective" generate-retrospective-report
    "plan" plan!
-   "check-sprint" core/check-sprint
-   "loop" core/work-loop})
+   ;; TODO: forced to provide a dummy milestone number when calling this  :-(
+   "check-sprint" check-sprint
+   "watch" watch})
 
 (defn run [cmd opts]
   (assert (contains? COMMAND-FNS cmd) "You must specify a valid action command")

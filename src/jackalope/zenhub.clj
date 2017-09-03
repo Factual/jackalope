@@ -10,18 +10,17 @@
 ;
 
 
-(defn keep-nums [is inums]
+(defn keep-nums [issues inums]
   (filter 
    (fn [x]
      (contains? inums (x "issue_number")))
-   is))
+   issues))
 
 (defn prune [inums]
-  (fn [pipe] (update-in pipe ["issues"] keep-nums inums)))
+  (fn [pipe] ))
 
-(defn keep-in-boards [inums boards]
-  (let [inums (into #{} inums)]
-    (assoc boards "pipelines" (map (prune inums) (boards "pipelines")))))
+(defn keep-in-pipeline [inums p]
+  (update-in p ["issues"] keep-nums inums))
 
 (defn get-boards
   "Returns ZenHub board data for the specified repository. 
@@ -31,6 +30,7 @@
 
    PIPELINES is a collection of hash-maps, one for each pipeline in the board.
    Each pipeline hash-map is like:
+     'id'     [ID, e.g., '55cfb4726acc911c6bb064f1']
      'name'   [NAME, e.g. 'To Do']
      'issues' [ISSUES]
 
@@ -51,23 +51,35 @@
       ;;TODO: throw something meaningful. e.g., this can happen if bad token
       (throw (RuntimeException. (str error))))))
 
-(defn get-boards-keep [token repo-id issue-nums]
-  (->> (get-boards token repo-id)
-      (keep-in-boards issue-nums)))
+(defn get-pipelines
+  "issue-nums must be a collection of issue numbers as numbers"
+  ([token repo-id]
+   (-> (get-boards token repo-id)
+       (get "pipelines")))
+  ([token repo-id issue-nums]
+   (map #(keep-in-pipeline (into #{} issue-nums) %)
+        (get-pipelines token repo-id))))
 
-(defn issue-nums->pipeline
+(defn is->m [pipeline]
+  (let [name (get pipeline "name")]
+    (reduce 
+     (fn [m {:strs [issue_number estimate] :as i}]
+       (assoc m issue_number (merge  {:pipeline name}
+                                     (when-let [e (get estimate "value")]
+                                       {:estimate e}))))
+     {}
+     (get pipeline "issues"))))
+
+(defn issue-nums->zhdata
   "Transforms ZenHub boards data into a lookup hash-map where keys are the issue
-   numbers and values are the pipeline names, e.g.:
-     {10282 'Nominated'
-      8161 'In Review'
-      9512 'Blocked'
-      ...}"
-  [boards]
-  (apply assoc {}
-         (mapcat #(interleave
-                   (map (fn [i] (get i "issue_number")) (get % "issues"))
-                   (repeat (get % "name")))
-                 (get boards "pipelines"))))
+   numbers and values are a hash-map representing ZenHub data. E.g.:
+     {10101 {:board-name 'Maybe', :estimate nil},
+      10100 {:board-name 'Maybe', :estimate 8},
+      10102 {:board-name 'To Do', :estimate 5},
+      10328 {:board-name 'To Do', :estimate 2}}"
+  [pipelines]
+
+  (apply merge (map is->m pipelines)))
 
 (defn get-epics 
   "Returns metadata for ZenHub epics in the specified repository.
@@ -95,42 +107,41 @@
   (into #{} (map #(get % "issue_number")
                  (get (get-epics token repo-id) "epic_issues"))))
 
-(defn +pipeline [n->p issue]
-  (assoc issue :zenhub-pipeline (n->p (:number issue))))
+(defn- _++ [issues pipelines ens]
+  (let [n->zh (issue-nums->zhdata pipelines)]
+    (map
+     (fn [{:keys [number] :as i}]
+       (-> i
+           (merge (get n->zh number))
+           (assoc :epic? (contains? ens number))))
+     issues)))
 
-(defn +epic? [ens issue]
-  (assoc issue
-         :zenhub-epic? (contains? ens (:number issue))))
-
-(defn ++
-  "Decorates each issue with ZenHub metadata. Adds key/value pairs to each 
-   issue in issues:
-     :zenhub-epic?     [true iff the issue is a ZenHub epic]
-     :zenhub-pipeline  [name of associated pipeline, if any. E.g., 'Blocked']"
-  [token repo-id issues]
-  (let [boards (get-boards-keep token repo-id (map :number issues))
-        n->p   (issue-nums->pipeline boards)
-        ens    (get-epic-issue-nums token repo-id)]
-    (map (comp (partial +pipeline n->p) (partial +epic? ens)) issues)))
+;TODO: can do as just one call, since pipes have 'is_epic'?
+;      (include a higher level refactor?)
+;TODO: can be more complete & useful, by including pipeline name(?)
+(defn ++ [token repo-id issues]
+  (_++ issues
+       (let [issue-nums (map :number issues)] 
+         (get-pipelines token repo-id issue-nums))
+       (get-epic-issue-nums token repo-id)))
 
 (defn epic? [i]
-  (:zenhub-epic? i))
+  (:epic? i))
 
 (defn blocked? [i]
-  (= "Blocked" (:zenhub-pipeline i)))
+  (= "Blocked" (:pipeline i)))
 
 (defn maybe? [i]
-  (= "Maybe" (:zenhub-pipeline i)))
+  (= "Maybe" (:pipeline i)))
 
 
 ;
 ; Conversions from ZenHub's format to ours
 ;
 
-(defn as-int [v]
-  (Integer/parseInt (str v)))
 
-(defn groom-pipelines
+
+#_(defn groom-pipelines
   "Reads in the raw JSON exported from ZenHub. Expects ZenHub's format.
 
    Returns a hash-map where keys are the pipelines and values are a collection of issue 
@@ -151,26 +162,3 @@
            (map #(as-int (get % "issue_number"))
                 (get p "issues"))])))
 
-(defn as-plan
-  "Takes boards data and converts to a concise plan structure; returns a
-   collection of hash-maps where each hash-map represents an issue and its
-   decision in the plan.
-
-   Example hash-map in the collection:
-   {:number 6279, :do? :no}"
-  [boards]
-  (mapcat
-   (fn [[p nums]]
-    (for [n nums]
-      {:number n
-       :do? (case p
-              :nominated :no
-              :maybe :maybe
-              :todo :yes
-              :inprogress :yes
-              :blocked :yes
-              :inreview :yes
-              :pending :yes
-              :closed :yes  ;; TODO! this results in assigning the next milestone, even tho it's DONE
-              :inscrutable)}))
-   (groom-pipelines boards)))

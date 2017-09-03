@@ -17,6 +17,8 @@
      {:user 'a_user_or_org'
       :repo 'a_repo'
       :github-token 'a_long_token_string_generated_via_your_github_acct'}"
+;; TODO: consider fetching repo-id and adding to conf. 
+;;       note that this would make github! non-lazy
   ([cred-file]
      (let [c (read-string (slurp cred-file))]
        (assert (:user c) "Github credentials must include :user")
@@ -96,34 +98,56 @@
 (defn get-open-milestone-by-title [ms-title]
   (github/get-open-milestone-by-title (github-conn) ms-title))
 
-(defn fetch-boards
-  "Fetches the plan data for the specified milestone, by talking to GitHub and
-   ZenHub. Returns the ZenHub boards data that represents the plan."
+(defn zh-do? [pipeline-name]
+  (case pipeline-name
+    "Nominated" :no
+    "Maybe" :maybe
+    "To Do" :yes
+    "In Progress" :yes
+    "Blocked" :yes
+    "In Review" :yes
+    "Pending" :yes
+    "Closed" :yes ;; TODO! this results in assigning the next milestone, even tho it's DONE
+    :inscrutable))
+
+(defn pipeline->plan-recs [{:strs [name issues]}]
+(for [i issues]
+    (merge 
+     {:number (get i "issue_number")
+      :do? (zh-do? name)}
+     (when-let [e (get-in i ["estimate" "value"])]
+       {:estimate e}))))
+
+(defn fetch-pipelines
+  "Returns the ZenHub pipeline data for issue numbers in the specified milestone"
   [ms-num]
   (let [{:keys [repo zenhub-token] :as gc} (github-conn)
         repo-id (:id (github/get-repo gc))
         issue-nums (map :number (github/fetch-issues-by-milestone
-                                 (github-conn) ms-num))]
-    (zenhub/get-boards-keep zenhub-token repo-id issue-nums)))
+                                           (github-conn) ms-num))]
+    (zenhub/get-pipelines zenhub-token repo-id issue-nums)))
 
+(defn as-plan
+  "Takes ZenHub boards data and converts to a concise plan structure; returns a
+   collection of hash-maps where each hash-map represents an issue and its
+   decision in the plan.
+
+   Example hash-map in the collection:
+   {:number 6279,
+    :estimate 3,
+    :title 'Add support for feature X',
+    :do? :no}"
+;;TODO!! we don't get the title here; merge in elsewhere and filter out unwanted issues
+  [pipelines]
+  (mapcat pipeline->plan-recs pipelines))
+
+;; TODO: should much of this live in the zenhub namespace (law of Demeter?)
 (defn fetch-plan-from-zenhub [ms-num]
-  (zenhub/as-plan (fetch-boards ms-num)))
+  (as-plan (fetch-pipelines ms-num)))
 
 ;;
 ;; Main use cases
 ;;
-
-(defn import-plan-from-zenhub
-  "Imports the plan data for the specified milestone. Fetches the data from
-   ZenHub and saves it to a JSON file and a Jackalope-ready EDN file.
-   Returns a hash-map like:
-     {:plan-json [JSON filename]
-      :plan-edn  [EDN filename]
-      :plan      [PLAN (as a structure)]"
-  [ms-num ms-title]
-  (let [{:keys [repo zenhub-token] :as gc} (github-conn)
-        boards (fetch-boards ms-num)] 
-    (pst/save-plan-from-zenhub ms-title boards)))
 
 (defn plan* [plan ms-curr ms-next]
   (let [{:keys [maybes edits]} (edits-from plan ms-curr ms-next)]
@@ -243,17 +267,16 @@
     (assign-ms number ms-num)))
 
 (defn with-zenhub
-  "Decorates each issue with ZenHub metadata, e.g. whether each issue is an epic.
-   To each issue hash-map, adds:
-     :zenhub-epic?     [true iff the issue is a ZenHub epic]
-     :zenhub-blocked?  [true iff the issue is in the ZenHub 'Blocked' pipeline]
+  "Decorates each issue with ZenHub data, e.g. whether each issue is an epic.
+   (See zenhub/++ for more details.)
    Returns issues unchanged if we don't have zenhub credentials."
   [issues]
   (if (zenhub?)
     (let [gc (github-conn)
           zenhub-token (:zenhub-token gc)
           repo-id (:id (github/get-repo gc))]
-      (zenhub/++ zenhub-token repo-id issues))))
+      (zenhub/++ zenhub-token repo-id issues))
+    issues))
 
 ;; TODO: this goes away once we have in-repo management of plans
 (defn generate-retrospective-report
@@ -264,17 +287,13 @@
          issues (with-zenhub (fetch-all-issues ms-num plan))]
      (retro/generate-report plan issues ms-title))))
 
-(defn retro-as-markdown-table [milestone plan]
-  (let [issues (with-zenhub (fetch-all-issues (:number milestone) plan))]
-    (retro/report-as-markdown plan issues)))
-
-(defn ->mkd-row [{:keys [number title]}]
-  (format "| #%s | %s |\n" number title))
+(defn ->mkd-row [{:keys [number]}]
+  (format "| #%s |\n" number))
 
 (defn ->mkd-table [plan do?]
   (str
-         "| Number | Title |\n"
-         "| ------------- | ------------- |\n"
+         "| Number |\n"
+         "| ------------- |\n"
          (apply str (map ->mkd-row (sort-by :number (filter #(= do? (:do? %)) plan))))))
 
 (defn plan->github-markdown-table
@@ -282,6 +301,7 @@
    (presumably, to be posted as an issue comment)."
   [plan]
   (str
+         "I've saved the plan!\n\n"
          "__Yes:__\n\n"
          (->mkd-table plan :yes)
          "\n\n"
@@ -300,7 +320,8 @@
    already be assigned a valid Milestone.
 
    Performs these steps:
-   * Fetches the sprint plan from GitHub/ZenHub (using the Milestone)
+   * Composes a sprint plan based on data from GitHub & ZenHub
+   * Moves 'no' items to next milestone
    * Writes a comment to the issue, showing the plan as a table
    * Sets the Milestone's description to contain the plan data
    * Closes the issue"
@@ -310,26 +331,41 @@
   (let [ms (:milestone issue)
         ms-num (:number ms)
         ms-title (:title ms)
+        _ (println "Fetching plan...")
         plan (fetch-plan-from-zenhub ms-num)
         plan-tbl (plan->github-markdown-table plan)
         plan-str (plan->ms-desc plan)]
+    (println "Running plan on repo...")
+    (plan! plan ms-num (inc ms-num))
     (github/comment-on-issue (github-conn) issue plan-tbl)
     (github/set-milestone-desc (github-conn) ms-num ms-title plan-str)
     (github/close-issue (github-conn) issue)
     plan))
 
+(defn plan-from-ms [ms]
+  (-> ms
+      :description
+      ms-desc->plan))
+
+;TODO: to be complete, for any issue that we didn't record estimate data for in
+;      original plan, need to fetch individually from ZenHub before generating
+;      retro report (or live with 'missing' estimate data in retro)
+;TODO! don't sweep the "sprint stop" issue to next ms
 (defn do-sprint-stop! [issue]
   (let [ms-num (get-in issue [:milestone :number])
         ms (github/fetch-milestone (github-conn) ms-num)
-        plan (-> ms
-                 :description
-                 ms-desc->plan)
-        actions (sweep-milestone ms-num (inc ms-num))]
+        plan (plan-from-ms ms)
+        issues (with-zenhub (fetch-all-issues ms-num plan))
+        actions (sweep-milestone ms-num (inc ms-num))
+        retro-str (retro/report-as-markdown plan issues)]
     (sweep! actions)
-    (github/comment-on-issue (github-conn) issue
-                             (retro-as-markdown-table ms plan))
+    (github/comment-on-issue (github-conn) issue retro-str)
     (github/close-issue (github-conn) issue)
-    actions))
+    {:milestone ms
+     :actions actions
+     :plan plan
+     :issues issues
+     :retro-str retro-str}))
 
 (defn find-work
   "Queries GitHub for assigned work that should be handled.
@@ -348,20 +384,15 @@
      {:stop stops})))
 
 (defn check-sprint [assignee]
+  (println "Checking sprint for" assignee)
   (let [work-issues (find-work assignee)]
     (doseq [i (:start work-issues)]
+      (println (format "Doing a Sprint Start (#%s) by %s" (:number i) assignee) "...")
       (do-sprint-start! i)
-      (println (format "Did a Sprint Start (#%s) by %s" (:number i) assignee)))
+      (println "Done."))
     (doseq [i (:stop work-issues)]
       (do-sprint-stop! i)
       (println (format "Did a Sprint Stop (#%s) by %s" (:number i) assignee)))))
-
-(defn work-loop [assignee]
-  (println "Work loop for" assignee)
-  (loop []
-      (check-sprint assignee)
-      (Thread/sleep 5000)
-      (recur)))
 
 (comment 
   ;; Example of importing and finalizing a plan
