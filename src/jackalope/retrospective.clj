@@ -16,14 +16,6 @@
 (defn login [i]
   (get-in i [:assignee :login]))
 
-(defn number->do?-ndx
-  "Returns an index (as a hash-map) of issue number to :do?"
-  [plan]
-  (into {} (map (juxt :number :do?) plan)))
-
-(defn +do? [i ndx]
-  (assoc i :do? (get ndx (:number i))))
-
 (defn outcome
   "Determines which outcome applies to issue.
    The outcome is chosen based on the issue's :do? decision and :state.
@@ -66,6 +58,28 @@
     (assoc issue :downgraded? true)
     issue))
 
+(defn inum->i
+  "Returns an index (as a hash-map) of issue number to :do?"
+  [plan]
+  (into {}
+        (for [{:keys [number] :as p} plan] [number p])))
+
+(defn +do? [i ndx]
+  (assoc i :do? (get-in ndx [(:number i) :do?])))
+
+(defn +est [i ndx]
+  (if-let [e (get-in ndx [(:number i) :estimate])]
+    (assoc i :estimate e)
+    i))
+
+(defn- mark [ndx]
+  (fn [i]
+    (-> i
+        (+do? ndx)
+        (+est ndx)
+        +outcome
+        +downgraded?)))
+
 (defn retrospective
   "Returns a hash-map organized by outcome, where each key is a defined outcome
    and each value is a collection of issues that saw that outcome.
@@ -77,11 +91,9 @@
    to the milestone. this is the issue data that will be compared against the
    plan to determine outcome."
   [plan issues]
-  (let [ndx (number->do?-ndx plan)
-        issues (map #(+do? % ndx) issues)]
+  (let [ndx (inum->i plan)]
     (->> issues
-         (map +outcome)
-         (map +downgraded?)
+         (map (mark ndx))
          (group-by :outcome))))
 
 (defn issues-url [sample-issue]
