@@ -4,6 +4,9 @@
             [tentacles.repos :as repos]
             [clojure.set :as set]))
 
+;TODO: public functions in this namespace make inconsistent use of how to
+;      specify an issue (sometimes a hash-map, sometimes the issue number)
+
 (def ISSUE-KEY-BLACKLIST
   ^{:doc "Keys we use internally in issue recs but don't care to show to github"}
   [:label+])
@@ -12,6 +15,11 @@
   "Runs body, presumably a github call. Examines the result for metadata.
    If there's metadata, assumes the request was good and returns it.
    Else, throws an exception with a (hopefully) useful message."
+  ;;TODO: it's a poor assumption that meta=success. 
+  ;;      E.g., valid search API calls don't return meta,
+  ;;      so for now we don't use assure.
+  ;;TODO: allow all error info to bubble up.
+  ;;      E.g., use slingshot and include access to full API resp
   {:added "1.0"}
   [& body]
   `(let [res# ~@body]
@@ -110,6 +118,10 @@
     (assert ms (str "Did not find an open milestone with title: " title))
     ms))
 
+(defn remove-milestone [conn inum]
+  (edit-issue conn {:number inum
+                             :milestone nil}))
+
 (defn get-repo [{:keys [user repo github-token]}]
   ;; doesn't seem to require a repo name; always returns the data for repo
   (assure (repos/specific-repo user repo {:oauth-token github-token})))
@@ -117,31 +129,48 @@
 (defn fetch-comments [{:keys [user repo github-token]} issue]
   (assure (issues/issue-comments user repo (:number issue) {:oauth-token github-token})))
 
-;TODO! get this to work
-; example that needs a working repo filter:
-; (:total_count (search-issues CONN "geopulse" {}))
-; also TODO: how to leave out keywords?
-(defn search-issues [{:keys [user repo github-token]} keywords q]
-  (search/search-issues keywords q {:oauth-token github-token :all-pages true}))
+;TODO: it appears that paging of search results does not work properly. 
+;      if you specify :all-pages=true and there are multiple pages of results,
+;      the results compe back as a LazySeq rather than a hash-map and it's all
+;      downhill from there. Workaround: for now, we're using :per-page instead
 
 (defn search-issues-assigned
   [{:keys [user repo github-token]} assignee title-search]
   (assure (search/search-issues title-search
-                                {:type "issue"
+                                {:repo (str user "/" repo)
+                                 :type "issue"
                                  :in "title"
-                                 :state "open"
+                                 :state "close"
                                  :assignee assignee}
-                                {:oauth-token github-token :all-pages true})))
+                                {:oauth-token github-token :per-page 100})))
+
+(defn search-issues-stale
+  "Returns all open issues in repo that were created before the specified time.
+   created-before-str should be a time formatted per GitHub chosen standard,
+   ISO8601, e.g.: '2017-12-31' for December 31st, 2017"
+  [{:keys [user repo github-token]} created-before-str]
+  ;; TODO: trying to sort by created/asc breaks the results in a weird way;
+  ;;       no meta, and results set is tiny
+  (search/search-issues ""
+                                {:repo (str user "/" repo)
+                                 :type "issue"
+                                 :created (str "<" created-before-str)
+                                 ;;:sort "created"
+                                 ;;:order "asc"
+                                 :state "open"}
+                                {:oauth-token github-token :per-page 100}))
 
 (defn fetch-open-issues
   [{:keys [user repo github-token]}]
-  (let [is (issues/issues user repo 
+  (let [is (issues/issues user repo
                           {:oauth-token github-token
                            :state     "open"
                            :all-pages true})]
     ;; for some reason, this doesn't always return non-nil metadata, therefore
     ;; not using (assure). Instead, assuming that a non map structure as the
     ;; top-level results means that something is wrong with getting issues.
+    ;; TODO: update: probably due to paging bugginess... if results have multiple pages
+    ;;       that could be badness
     ;; TODO: the following ugly code is duplicative (see above)
     (if-not (map? is)
       (remove pull-request? is)
