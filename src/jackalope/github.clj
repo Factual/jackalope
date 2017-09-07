@@ -80,6 +80,24 @@
   (remove pull-request?
           (fetch-issues-and-prs-by-milestone conn ms-num)))
 
+(defn fetch-closed-issues-by-milestone
+  "Returns the issues assigned to the specified milestone"
+  [{:keys [user repo github-token]} ms-num]
+  (let [is (issues/issues user repo
+                          {:oauth-token github-token
+                           :milestone ms-num
+                           :state     "closed"
+                           :all-pages true})]
+    ;; for some reason, this doesn't always return non-nil metadata, therefore
+    ;; not using (assure). Instead, assuming that a non map structure as the
+    ;; top-level results means that something is wrong with getting issues.
+    (if-not (map? is)
+      (remove pull-request? is)
+      (throw (RuntimeException. (format "Bad result, status: %s. %s"
+                                        (:status is)
+                                        (str (get-in is [:body :message]) " "
+                                             (get-in is [:body :errors]))))))))
+
 (defn fetch-issue [{:keys [user repo github-token]} inum]
   (assure (issues/specific-issue user repo inum {:oauth-token github-token})))
 

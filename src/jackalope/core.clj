@@ -237,13 +237,22 @@
   ;; labels, which can be redundant when the ticket already had the label.)
   ;; Caveat: The sweep-milestone step is currently conceptually separate from
   ;;   the plan! step. Not sure if it's worth coupling them for this
-  (let [msis (doall (github/fetch-issues-by-milestone (github-conn) ms-curr))]
+  (let [msis (doall (github/fetch-issues-by-milestone (github-conn) ms-curr))
+        closed-ahead (github/fetch-closed-issues-by-milestone (github-conn) ms-next)]
     (concat
+     ;; issues closed in ms-next should be late-adds in ms-curr:
+     (map (fn [n]
+            {:number n
+             :action :assign-milestone
+             :ms-num ms-curr})
+          (map :number closed-ahead))
+     ;; incompletes should be rolled into ms-next:
      (map (fn [n]
             {:number n
              :action :assign-milestone
              :ms-num ms-next})
           (map :number (filter issues/open? msis)))
+     ;; clear maybe labels in ms-curr:
      (map (fn [n]
             {:number n
              :action :unmaybe})
