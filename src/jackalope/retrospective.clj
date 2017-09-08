@@ -1,6 +1,7 @@
 (ns jackalope.retrospective
-  (:require [jackalope.issues :as i]
+  (:require [jackalope.issues :as is]
             [jackalope.zenhub :as zh]
+            [jackalope.markdown :as md]
             [clojure.string :as str]
             [hiccup.core :as hic]))
 
@@ -12,9 +13,6 @@
 
 (defn maybe? [i]
   (= :maybe (:do? i)))
-
-(defn login [i]
-  (get-in i [:assignee :login]))
 
 (defn outcome
   "Determines which outcome applies to issue.
@@ -33,16 +31,16 @@
    returns :inscrutable if outcome could not be determined based on our rules"
   [issue]
   (cond
-    (and (i/open? issue) (not (no? issue))
+    (and (is/open? issue) (not (no? issue))
          (zh/blocked? issue))                :blocked
-    (and (i/closed? issue) (yes? issue))     :done-as-planned
-    (and (i/closed? issue) (maybe? issue))   :done-as-maybe
-    (and (i/open? issue) (maybe? issue)
+    (and (is/closed? issue) (yes? issue))     :done-as-planned
+    (and (is/closed? issue) (maybe? issue))   :done-as-maybe
+    (and (is/open? issue) (maybe? issue)
          (not (zh/epic? issue)))             :not-done-maybe
     (and (nil? (:do? issue))
-         (i/closed? issue))                  :late-add
-    (and (i/open? issue) (no? issue))        :skipped-as-no
-    (and (i/open? issue) (yes? issue)
+         (is/closed? issue))                  :late-add
+    (and (is/open? issue) (no? issue))        :skipped-as-no
+    (and (is/open? issue) (yes? issue)
          (not (zh/epic? issue)))             :incomplete
     :else                                    :inscrutable))
 
@@ -54,7 +52,7 @@
    the issue was changed during the sprint from an original 'yes' to 'maybe' or
    'no'"
   [issue]
-  (if (and (= :incomplete (:outcome issue)) (i/open? issue) (zh/maybe? issue))
+  (if (and (= :incomplete (:outcome issue)) (is/open? issue) (zh/maybe? issue))
     (assoc issue :downgraded? true)
     issue))
 
@@ -117,7 +115,7 @@
            {:href
             (str issues-url "/" (:number i))}
            (:number i)]]
-         [:td (login i)]
+         [:td (is/login i)]
          [:td (:title i)
           (when (zh/epic? i) [:i " (epic)"])
           (when (:downgraded? i) [:i (str " (downgraded to maybe)")])]
@@ -172,20 +170,21 @@
   (let [retro  (retrospective plan issues)]
     (make-retrospective-file retro ms-title)))
 
-; TODO: this code makes my eyes bleed
-(defn generate-report-as-markdown [retro]
-  (apply str (for [[k v] OUTCOMES]
-               (apply str
-                      "\n__" v ":__\n\n"
-                      (if-let [issues (retro k)]
-                        (apply str 
-                               "#|Estimate|Assignee|Title\n"
-                               "---|---|---|---\n"
-                               (for [i (sort-by login issues)]
-                                 (str "#"(:number i) "|" (:estimate i) "|"
-                                      (login i) "|" (:title i) "\n")))
-                        "_(none)_\n\n")))))
+(defn- ->md-table [issues]
+  (md/table ["Estimate" "Assignee" "Title"]
+            ;; one issue per row, sorted by assignee
+            (for [{:keys [number estimate title] :as i}
+                  (sort-by is/login issues)]
+              [(str "#" number) estimate (is/login i) title])))
 
-(defn report-as-markdown [plan issues]
-  (generate-report-as-markdown
-   (retrospective plan issues)))
+(defn- ->md [retro]
+  (apply str
+         (for [[k v] OUTCOMES]
+           (apply str
+                  "\n__" v ":__\n\n"
+                  (if-let [issues (retro k)]
+                    (format "%s\n" (->md-table issues))
+                    "_(none)_\n")))))
+
+(defn as-markdown [plan issues]
+  (->md (retrospective plan issues)))
