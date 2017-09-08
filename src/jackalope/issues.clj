@@ -21,3 +21,6 @@
 
 (defn creator [issue]
   (:login (:user issue)))
+
+(defn login [issue]
+  (get-in issue [:assignee :login]))

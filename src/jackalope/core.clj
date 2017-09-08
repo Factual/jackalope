@@ -4,6 +4,7 @@
             [jackalope.issues :as issues]
             [jackalope.persist :as pst]
             [jackalope.retrospective :as retro]
+            [jackalope.markdown :as md]
             [clojure.set :as set]))
 
 (def DEFAULT-CONF "github-prod.edn")
@@ -296,15 +297,14 @@
          issues (with-zenhub (fetch-all-issues ms-num plan))]
      (retro/generate-report plan issues ms-title))))
 
-(defn ->mkd-row [{:keys [number]}]
-  (format "| #%s |\n" number))
+(defn plan->table-md [plan do?]
+  (md/table ["Number" "Title"]
+            (for [{:keys [number title]}
+                  (sort-by :number (filter #(= do? (:do? %)) plan))]
+              [(str "#" number) title])))
 
-(defn ->mkd-table [plan do?]
-  (str
-         "| Number |\n"
-         "| ------------- |\n"
-         (apply str (map ->mkd-row (sort-by :number (filter #(= do? (:do? %)) plan))))))
-
+; TODO: consider adding in, "what we said 'no' to".
+;       (maybe when that list is better managed?)
 (defn plan->github-markdown-table
   "Returns the specific plan, formatted as a table in GitHub markdown
    (presumably, to be posted as an issue comment)."
@@ -324,6 +324,21 @@
   (read-string
    (subs s 9 (- (count s) 4))))
 
+(defn +titles
+  "For maybe and yes plan items, adds in a :title.
+   Very expensive -- realizing the returned sequence will cause a call out to
+   GitHub to fetches each individual issue in plan, one at a time, for all items
+   that are 'maybe' or 'yes' in the plan."
+  [plan]
+  (let [conn (github-conn)]
+    (map
+     (fn [{:keys [number do?] :as p}]
+       (if (contains? #{:maybe :yes} do?)
+         (let [i (github/fetch-issue conn number)]
+           (assoc p :title (:title i)))
+         p))
+     plan)))
+
 (defn do-sprint-start!
   "Handles a request to start a sprint, as specified in issue. The issue must
    already be assigned a valid Milestone.
@@ -341,7 +356,7 @@
         ms-num (:number ms)
         ms-title (:title ms)
         _ (println "Fetching plan...")
-        plan (fetch-plan-from-zenhub ms-num)
+        plan (+titles (fetch-plan-from-zenhub ms-num))
         plan-tbl (plan->github-markdown-table plan)
         plan-str (plan->ms-desc plan)]
     (println "Running plan on repo...")
@@ -366,7 +381,7 @@
         plan (plan-from-ms ms)
         issues (with-zenhub (fetch-all-issues ms-num plan))
         actions (sweep-milestone ms-num (inc ms-num))
-        retro-str (retro/report-as-markdown plan issues)]
+        retro-str (retro/as-markdown plan issues)]
     (sweep! actions)
     (github/comment-on-issue (github-conn) issue retro-str)
     (github/close-issue (github-conn) issue)
