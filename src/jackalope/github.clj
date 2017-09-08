@@ -158,7 +158,7 @@
                                 {:repo (str user "/" repo)
                                  :type "issue"
                                  :in "title"
-                                 :state "close"
+                                 :state "open"
                                  :assignee assignee}
                                 {:oauth-token github-token :per-page 100})))
 
