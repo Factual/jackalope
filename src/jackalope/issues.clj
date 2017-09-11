@@ -1,5 +1,4 @@
-(ns jackalope.issues
-  (:require [jackalope.github :as git]))
+(ns jackalope.issues)
 
 (defn closed? [issue]
   (= "closed" (:state issue)))

@@ -108,7 +108,7 @@
     {:style "border: 0; width: 90%"}
     [:tr {:align "left"} [:th "#"] [:th "assignee"] [:th "title"] [:th "milestone"]]
     (let [issues-url (issues-url (first issues))]
-      (for [i (sort-by login issues)]
+      (for [i (sort-by is/login issues)]
         [:tr
          [:td
           [:a

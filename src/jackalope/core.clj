@@ -312,10 +312,10 @@
   (str
          "I've saved the plan!\n\n"
          "__Yes:__\n\n"
-         (->mkd-table plan :yes)
+         (plan->table-md plan :yes)
          "\n\n"
          "__Maybe:__\n\n"
-         (->mkd-table plan :maybe)))
+         (plan->table-md plan :maybe)))
 
 (defn plan->ms-desc [plan]
   (format "<!--PLAN %s -->" (pr-str plan)))
