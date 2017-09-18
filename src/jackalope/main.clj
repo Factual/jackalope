@@ -90,10 +90,10 @@
          (when (not milestone-title)
            ;;TODO: we don't always need this. i.e. and e.g., sweep! does not require a milestone title
            {:milestone-title
-            (:title (core/get-milestone milestone-number))})
+            (:title (core/fetch-milestone milestone-number))})
          (when (not milestone-number)
            {:milestone-number
-            (:number (core/get-open-milestone-by-title milestone-title))})))
+            (:number (core/fetch-open-milestone-by-title milestone-title))})))
 
 (defn sweep!
   "Runs a sweep of the specified milestone into the next milestone.

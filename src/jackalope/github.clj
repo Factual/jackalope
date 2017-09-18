@@ -126,11 +126,8 @@
 (defn fetch-issue-events [{:keys [user repo github-token]} inum]
   (assure (issues/issue-events user repo inum {:oauth-token github-token})))
 
-(defn get-milestone [{:keys [user repo github-token]} ms-num]
-  (assure (issues/specific-milestone user repo ms-num {:oauth-token github-token})))
-
 ;; TODO: be sure to fetch *all* milestones and filter them
-(defn get-open-milestone-by-title [{:keys [user repo github-token]} title]
+(defn fetch-open-milestone-by-title [{:keys [user repo github-token]} title]
   (let [mss (issues/repo-milestones user repo {:oauth-token github-token :state :open})
         ms (first (filter #(= title (:title %)) mss))]
     (assert ms (str "Did not find an open milestone with title: " title))
@@ -140,7 +137,7 @@
   (edit-issue conn {:number inum
                              :milestone nil}))
 
-(defn get-repo [{:keys [user repo github-token]}]
+(defn fetch-repo [{:keys [user repo github-token]}]
   ;; doesn't seem to require a repo name; always returns the data for repo
   (assure (repos/specific-repo user repo {:oauth-token github-token})))
 

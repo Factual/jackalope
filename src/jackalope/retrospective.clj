@@ -91,6 +91,7 @@
   [plan issues]
   (let [ndx (inum->i plan)]
     (->> issues
+         ;; decorate issues using plan/issues ndx
          (map (mark ndx))
          (group-by :outcome))))
 

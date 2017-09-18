@@ -93,11 +93,11 @@
 (defn unmaybe [inum]
   (github/remove-a-label (github-conn) inum :maybe))
 
-(defn get-milestone [ms-num]
-  (github/get-milestone (github-conn) ms-num))
+(defn fetch-milestone [ms-num]
+  (github/fetch-milestone (github-conn) ms-num))
 
-(defn get-open-milestone-by-title [ms-title]
-  (github/get-open-milestone-by-title (github-conn) ms-title))
+(defn fetch-open-milestone-by-title [ms-title]
+  (github/fetch-open-milestone-by-title (github-conn) ms-title))
 
 (defn zh-do? [pipeline-name]
   (case pipeline-name
@@ -123,7 +123,7 @@
   "Returns the ZenHub pipeline data for issue numbers in the specified milestone"
   [ms-num]
   (let [{:keys [repo zenhub-token] :as gc} (github-conn)
-        repo-id (:id (github/get-repo gc))
+        repo-id (:id (github/fetch-repo gc))
         issue-nums (map :number (github/fetch-issues-by-milestone
                                            (github-conn) ms-num))]
     (zenhub/get-pipelines zenhub-token repo-id issue-nums)))
@@ -284,7 +284,7 @@
   (if (zenhub?)
     (let [gc (github-conn)
           zenhub-token (:zenhub-token gc)
-          repo-id (:id (github/get-repo gc))]
+          repo-id (:id (github/fetch-repo gc))]
       (zenhub/++ zenhub-token repo-id issues))
     issues))
 
