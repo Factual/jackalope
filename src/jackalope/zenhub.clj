@@ -22,7 +22,7 @@
 (defn keep-in-pipeline [inums p]
   (update-in p ["issues"] keep-nums inums))
 
-(defn get-boards
+(defn fetch-boards
   "Returns ZenHub board data for the specified repository. 
 
    Returned hash-map is like:
@@ -51,14 +51,14 @@
       ;;TODO: throw something meaningful. e.g., this can happen if bad token
       (throw (RuntimeException. (str error))))))
 
-(defn get-pipelines
+(defn fetch-pipelines
   "issue-nums must be a collection of issue numbers as numbers"
   ([token repo-id]
-   (-> (get-boards token repo-id)
+   (-> (fetch-boards token repo-id)
        (get "pipelines")))
   ([token repo-id issue-nums]
    (map #(keep-in-pipeline (into #{} issue-nums) %)
-        (get-pipelines token repo-id))))
+        (fetch-pipelines token repo-id))))
 
 (defn is->m [pipeline]
   (let [name (get pipeline "name")]
@@ -81,7 +81,7 @@
 
   (apply merge (map is->m pipelines)))
 
-(defn get-epics 
+(defn fetch-epics 
   "Returns metadata for ZenHub epics in the specified repository.
 
    Returns a collection of hash-maps where each hash-map represents an epic and
@@ -101,11 +101,11 @@
       ;;TODO: throw something meaningful. e.g., this can happen if bad token
       (throw (RuntimeException. (str error))))))
 
-(defn get-epic-issue-nums
+(defn fetch-epic-issue-nums
   "Returns the set of epic issue numbers for the specified repo."
   [token repo-id]
   (into #{} (map #(get % "issue_number")
-                 (get (get-epics token repo-id) "epic_issues"))))
+                 (get (fetch-epics token repo-id) "epic_issues"))))
 
 (defn- _++ [issues pipelines ens]
   (let [n->zh (issue-nums->zhdata pipelines)]
@@ -122,8 +122,8 @@
 (defn ++ [token repo-id issues]
   (_++ issues
        (let [issue-nums (map :number issues)] 
-         (get-pipelines token repo-id issue-nums))
-       (get-epic-issue-nums token repo-id)))
+         (fetch-pipelines token repo-id issue-nums))
+       (fetch-epic-issue-nums token repo-id)))
 
 (defn epic? [i]
   (:epic? i))

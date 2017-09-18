@@ -126,7 +126,7 @@
         repo-id (:id (github/fetch-repo gc))
         issue-nums (map :number (github/fetch-issues-by-milestone
                                            (github-conn) ms-num))]
-    (zenhub/get-pipelines zenhub-token repo-id issue-nums)))
+    (zenhub/fetch-pipelines zenhub-token repo-id issue-nums)))
 
 (defn as-plan
   "Takes ZenHub boards data and converts to a concise plan structure; returns a
