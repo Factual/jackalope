@@ -172,7 +172,7 @@
     (make-retrospective-file retro ms-title)))
 
 (defn- ->md-table [issues]
-  (md/table ["Estimate" "Assignee" "Title"]
+  (md/table ["Issue" "Estimate" "Assignee" "Title"]
             ;; one issue per row, sorted by assignee
             (for [{:keys [number estimate title] :as i}
                   (sort-by is/login issues)]
