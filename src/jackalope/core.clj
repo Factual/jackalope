@@ -339,6 +339,13 @@
          p))
      plan)))
 
+(defn without
+  "Removes the indicated issue from coll, assuming that coll is a collection of
+   hash-maps each with a :number key. This allows us to leave open work issues
+   in their home milestone (avoids sweeping or rolling them forward)."
+ [{:keys [number]} coll]
+  (remove #(= number (:number %)) coll))
+
 (defn do-sprint-start!
   "Handles a request to start a sprint, as specified in issue. The issue must
    already be assigned a valid Milestone.
@@ -356,7 +363,7 @@
         ms-num (:number ms)
         ms-title (:title ms)
         _ (println "Fetching plan...")
-        plan (+titles (fetch-plan-from-zenhub ms-num))
+        plan (without issue (+titles (fetch-plan-from-zenhub ms-num)))
         plan-tbl (plan->github-markdown-table plan)
         plan-str (plan->ms-desc plan)]
     (println "Running plan on repo...")
@@ -370,12 +377,6 @@
   (-> ms
       :description
       ms-desc->plan))
-
-(defn without
-  "Removes the indicated issue from actions. Allows us to leave our open work
-   issue in its home milestone while sweeping."
- [{:keys [number]} actions]
-  (remove #(= number (:number %)) actions))
 
 ;TODO: to be complete, for any issue that we didn't record estimate data for in
 ;      original plan, need to fetch individually from ZenHub before generating
