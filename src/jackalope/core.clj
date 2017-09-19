@@ -371,6 +371,12 @@
       :description
       ms-desc->plan))
 
+(defn without
+  "Removes the indicated issue from actions. Allows us to leave our open work
+   issue in its home milestone while sweeping."
+ [{:keys [number]} actions]
+  (remove #(= number (:number %)) actions))
+
 ;TODO: to be complete, for any issue that we didn't record estimate data for in
 ;      original plan, need to fetch individually from ZenHub before generating
 ;      retro report (or live with 'missing' estimate data in retro)
@@ -380,7 +386,7 @@
         ms (github/fetch-milestone (github-conn) ms-num)
         plan (plan-from-ms ms)
         issues (with-zenhub (fetch-all-issues ms-num plan))
-        actions (sweep-milestone ms-num (inc ms-num))
+        actions (without issue (sweep-milestone ms-num (inc ms-num)))
         retro-str (retro/as-markdown plan issues)]
     (sweep! actions)
     (github/comment-on-issue (github-conn) issue retro-str)
