@@ -378,6 +378,10 @@
       :description
       ms-desc->plan))
 
+(defn do-sprint-stop-comments [plan issues issue]
+  (doseq [[_ md] (retro/as-markdowns plan issues)]
+    (github/comment-on-issue (github-conn) issue md)))
+
 ;TODO: to be complete, for any issue that we didn't record estimate data for in
 ;      original plan, need to fetch individually from ZenHub before generating
 ;      retro report (or live with 'missing' estimate data in retro)
@@ -387,16 +391,14 @@
         ms (github/fetch-milestone (github-conn) ms-num)
         plan (plan-from-ms ms)
         issues (with-zenhub (fetch-all-issues ms-num plan))
-        actions (without issue (sweep-milestone ms-num (inc ms-num)))
-        retro-str (retro/as-markdown plan issues)]
+        actions (without issue (sweep-milestone ms-num (inc ms-num)))]
     (sweep! actions)
-    (github/comment-on-issue (github-conn) issue retro-str)
+    (do-sprint-stop-comments plan issues issue)
     (github/close-issue (github-conn) issue)
     {:milestone ms
      :actions actions
      :plan plan
-     :issues issues
-     :retro-str retro-str}))
+     :issues issues}))
 
 (defn find-work
   "Queries GitHub for assigned work that should be handled.

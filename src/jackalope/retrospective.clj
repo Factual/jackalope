@@ -178,14 +178,18 @@
                   (sort-by is/login issues)]
               [(str "#" number) estimate (is/login i) title])))
 
-(defn- ->md [retro]
-  (apply str
-         (for [[k v] OUTCOMES]
-           (apply str
-                  "\n__" v ":__\n\n"
-                  (if-let [issues (retro k)]
-                    (format "%s\n" (->md-table issues))
-                    "_(none)_\n")))))
-
-(defn as-markdown [plan issues]
-  (->md (retrospective plan issues)))
+(defn as-markdowns
+  "Returns the retrospective report as a hash-map keyed by outcome. Each value
+   is the markdown representation of the corresponding outcome."
+  [plan issues]
+  (let [retro (retrospective plan issues)]
+    (reduce
+     (fn [acc [outcome-kw outcome-desc]]
+       (assoc acc outcome-kw
+              (apply str
+                     "## " outcome-desc "\n"
+                     (if-let [issues (retro outcome-kw)]
+                       (format "%s\n" (->md-table issues))
+                       "_(none)_\n"))))
+     {}
+     OUTCOMES)))
