@@ -61,5 +61,6 @@
       (close-as-stale! conn i))))
 
 (comment
+  ; N.B.: will include issues considered Epic by ZenHub
   (def STALE (:items (github/search-issues-stale CONN "2016-11-01")))
 )

@@ -2,7 +2,6 @@
   (:require [jackalope.github :as github]
             [jackalope.zenhub :as zenhub]
             [jackalope.issues :as issues]
-            [jackalope.persist :as pst]
             [jackalope.retrospective :as retro]
             [jackalope.markdown :as md]
             [clojure.set :as set]))
@@ -288,15 +287,6 @@
       (zenhub/++ zenhub-token repo-id issues))
     issues))
 
-;; TODO: this goes away once we have in-repo management of plans
-(defn generate-retrospective-report
-  "Generates a retrospective report, using the specified milestone and saved
-   plan. Saves the report as HTML to a local file. Returns the filename."
-  ([ms-num ms-title]
-   (let [plan   (pst/read-plan-from-edn (str ms-title ".plan.edn"))
-         issues (with-zenhub (fetch-all-issues ms-num plan))]
-     (retro/generate-report plan issues ms-title))))
-
 (defn plan->table-md [plan do?]
   (md/table ["Number" "Title"]
             (for [{:keys [number title]}
@@ -385,7 +375,6 @@
 ;TODO: to be complete, for any issue that we didn't record estimate data for in
 ;      original plan, need to fetch individually from ZenHub before generating
 ;      retro report (or live with 'missing' estimate data in retro)
-;TODO! don't sweep the "sprint stop" issue to next ms
 (defn do-sprint-stop! [issue]
   (let [ms-num (get-in issue [:milestone :number])
         ms (github/fetch-milestone (github-conn) ms-num)

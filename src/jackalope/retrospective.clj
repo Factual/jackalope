@@ -95,81 +95,12 @@
          (map (mark ndx))
          (group-by :outcome))))
 
-(defn issues-url [sample-issue]
-  (str/join "/"
-            (-> sample-issue
-                :html_url
-                (str/split #"/")
-                butlast)))
-
-(defn table
-  [issues]
-  (list
-   [:table
-    {:style "border: 0; width: 90%"}
-    [:tr {:align "left"} [:th "#"] [:th "assignee"] [:th "title"] [:th "milestone"]]
-    (let [issues-url (issues-url (first issues))]
-      (for [i (sort-by is/login issues)]
-        [:tr
-         [:td
-          [:a
-           {:href
-            (str issues-url "/" (:number i))}
-           (:number i)]]
-         [:td (is/login i)]
-         [:td (:title i)
-          (when (zh/epic? i) [:i " (epic)"])
-          (when (:downgraded? i) [:i (str " (downgraded to maybe)")])]
-         [:td (get-in i [:milestone :title])]]))]))
-
-(defn section-hic [issues heading]
-  (when (not (empty? issues))
-    (list
-     [:h2 heading]
-     [:p]
-     (table issues)
-     [:p])))
-
 (def OUTCOMES
   [[:done-as-planned "Completed Planned Yes"]
    [:done-as-maybe   "Completed Planned Maybe"]
    [:late-add        "Completed Unplanned (Late Adds)"]
    [:incomplete      "Incomplete Planned Yes"]
    [:blocked         "Blocked"]])
-
-(defn counts-hic [retro]
-  [:table
-   (for [[k v] OUTCOMES]
-     [:tr
-      [:td v] [:td (count (k retro))]])
-   [:tr
-    [:td "Total"] [:td (reduce + (map (comp count second) retro))]]])
-
-(defn report-hic [retro]
-  (list
-   (for [[outcome heading] OUTCOMES]
-     (section-hic (outcome retro) heading))
-   [:hr]
-   [:h2 "Summary"]
-   (counts-hic retro)))
-
-(defn report-html
-  "retro must be a hash-map organized by outcome, where each key is a defined
-   outcome and each value is a collection of issues that saw that outcome.
-   E.g., the result of calling (retrospective ...).
-
-   Returns an HTML representation of the retrospective report"
-  [retro]
-  (hic/html (report-hic retro)))
-
-(defn make-retrospective-file [retro ms-title]
-  (let [f (str ms-title ".retrospective.html")]
-    (spit f (report-html retro))
-    f))
-
-(defn generate-report [plan issues ms-title]
-  (let [retro  (retrospective plan issues)]
-    (make-retrospective-file retro ms-title)))
 
 (defn- ->md-table [issues]
   (md/table ["Issue" "Estimate" "Assignee" "Title"]

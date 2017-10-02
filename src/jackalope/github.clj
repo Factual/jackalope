@@ -159,7 +159,6 @@
                                  :assignee assignee}
                                 {:oauth-token github-token :per-page 100})))
 
-; TODO: treat epics differently, e.g. filter them out?
 (defn search-issues-stale
   "Returns all open issues in repo that were created before the specified time.
    created-before-str should be a time formatted per GitHub chosen standard,
