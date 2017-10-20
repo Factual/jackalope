@@ -126,13 +126,6 @@
 (defn fetch-issue-events [{:keys [user repo github-token]} inum]
   (assure (issues/issue-events user repo inum {:oauth-token github-token})))
 
-;; TODO: be sure to fetch *all* milestones and filter them
-(defn fetch-open-milestone-by-title [{:keys [user repo github-token]} title]
-  (let [mss (issues/repo-milestones user repo {:oauth-token github-token :state :open})
-        ms (first (filter #(= title (:title %)) mss))]
-    (assert ms (str "Did not find an open milestone with title: " title))
-    ms))
-
 (defn remove-milestone [conn inum]
   (edit-issue conn {:number inum
                              :milestone nil}))

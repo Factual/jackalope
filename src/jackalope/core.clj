@@ -92,12 +92,6 @@
 (defn unmaybe [inum]
   (github/remove-a-label (github-conn) inum :maybe))
 
-(defn fetch-milestone [ms-num]
-  (github/fetch-milestone (github-conn) ms-num))
-
-(defn fetch-open-milestone-by-title [ms-title]
-  (github/fetch-open-milestone-by-title (github-conn) ms-title))
-
 (defn zh-do? [pipeline-name]
   (case pipeline-name
     "Nominated" :no
