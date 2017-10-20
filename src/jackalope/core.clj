@@ -408,6 +408,7 @@
 (defn check-sprint [assignee]
   (println "Checking sprint for" assignee)
   (let [work-issues (find-work assignee)]
+    (println "Work issues:" work-issues)
     (doseq [i (:start work-issues)]
       (println (format "Doing a Sprint Start (#%s) by %s" (:number i) assignee) "...")
       (do-sprint-start! i)

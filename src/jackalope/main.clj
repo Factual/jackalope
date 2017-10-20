@@ -4,22 +4,7 @@
 ;
 ; Commands:
 ;
-; plan  For use after setting a plan. Retrieves boards from ZenHub and updates
-;       tickets per our decisions. 
-;   requires --conf
-;   requires a --milestone-title or a --milestone-number
-;   supports --preview
-;
-; sweep  For use at the end of a sprint. Sweeps tickets from one milestone to
-;        the next.
-;   requires --conf
-;   requires a --milestone-title or a --milestone-number
-;   supports --preview
-;;
 ; Example CLI calls, using lein:
-;   lein run -- plan --conf github-prod.edn -n 225 --preview
-;   lein run -- plan --conf github-prod.edn -n 225
-;   lein run -- sweep --conf github-prod.edn -n 225
 ;
 (ns jackalope.main
   (:require [jackalope.core :as core]
@@ -37,10 +22,6 @@
     :default core/DEFAULT-CONF
     ;; side effect; caches github auth
     :parse-fn #(core/github! %)]
-   ["-m" "--milestone-title MILESTONE-TITLE"]
-   ["-n" "--milestone-number MILESTONE-NUMBER"
-    :parse-fn #(Integer/parseInt %)
-    :validate [#(< 0 % 65536) "Must be a valid milestone number"]]
    ["-a" "--assignee ASSIGNEE"]
    ["-h" "--help" "Show this help message"]])
 
@@ -57,8 +38,6 @@
         options-summary
         ""
         "Actions:"
-        "  plan            Finalize a plan"
-        "  sweep           Sweep a closing milestone"
         "  check-sprint    Perform a check for sprint related work; do the work"
         "  loop            Run the main work loop, forever"
         ""
@@ -69,63 +48,6 @@
   (str "The following errors occurred while parsing your command:\n\n"
        (clojure.string/join \newline errors)))
 
-(defn good-opts
-  "Validate and groom cli options:
-   * make sure there's a valid milestone indicator
-     (So far, all CLI commands require a milestone so this
-      hardwires it as expected)"
-  [{:keys [milestone-title milestone-number] :as opts}]
-  (assert (or milestone-title milestone-number) "You must indicate a milestone")
-  (merge opts
-         (when (not milestone-title)
-           ;;TODO: we don't always need this. i.e. and e.g., sweep! does not require a milestone title
-           {:milestone-title
-            (:title (core/fetch-milestone milestone-number))})
-         (when (not milestone-number)
-           {:milestone-number
-            (:number (core/fetch-open-milestone-by-title milestone-title))})))
-
-(defn sweep!
-  "Runs a sweep of the specified milestone into the next milestone.
-   Assumes the next milestone number is milestone + 1.
-   If preview is true, prints out actions but does not run them."
-  [{:keys [milestone-number preview]}]
-  (assert milestone-number)
-  (let [ms-next (inc milestone-number)
-        actions (core/sweep-milestone milestone-number ms-next)]
-    (if preview
-      (do
-        (println "Sweep preview, " (count actions) " actions:")
-        (doseq [a actions] (println a)))
-      (do
-        (core/sweep! actions)
-        (println (format "Swept %s issues into milestone %s" (count actions)
-                         ms-next))))))
-
-(defn plan!
-  "Imports the specified plan from ZenHub and finalizes it in Github.
-
-   Plan files will be saved locally, one as JSON (the data imported from ZenHub)
-   and one as EDN (the Jackalope-ready format).
-
-   Assumes the next milestone number is milestone + 1.
-
-   If preview is true, writes the plan files and outputs the edits that would
-   happen, but does not run the edits."
-  [{:keys [milestone-title milestone-number preview]}]
-  (assert milestone-number)
-  (assert milestone-title)
-  (let [{:keys [plan]} (core/import-plan-from-zenhub
-                        milestone-number
-                        milestone-title)]
-    (if preview
-      (let [{:keys [edits maybes]}
-            (core/plan* plan milestone-number (inc milestone-number))]
-        (doseq [e edits] (println e)))
-      (do
-        (core/plan! plan milestone-number (inc milestone-number))
-        (println (format "Finalized plan for %s (%s)" milestone-title milestone-number))))))
-
 (defn check-sprint [{:keys [assignee]}]
   (core/check-sprint assignee))
 
@@ -135,26 +57,14 @@
   (Thread/sleep 5000)
   (recur opts))
 
-(comment
-  ;; Example call to plan!, preview mode:
-  (plan! {:preview true
-           :milestone-number 219
-           :milestone-title "16.09.1"})
-
-  ;; Example call to plan!, really do it:
-  (plan! {:milestone-number 219
-          :milestone-title "16.09.1"}))
-
 (def COMMAND-FNS 
-  {"sweep" sweep!
-   "plan" plan!
-   ;; TODO: forced to provide a dummy milestone number when calling this  :-(
+  {;; TODO: forced to provide a dummy milestone number when calling this  :-(
    "check-sprint" check-sprint
    "watch" watch})
 
 (defn run [cmd opts]
   (assert (contains? COMMAND-FNS cmd) "You must specify a valid action command")
-  ((get COMMAND-FNS cmd) (good-opts opts)))
+  ((get COMMAND-FNS cmd) opts))
 
 (defn -main
   [& args]
