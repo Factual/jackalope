@@ -58,8 +58,7 @@
   (recur opts))
 
 (def COMMAND-FNS 
-  {;; TODO: forced to provide a dummy milestone number when calling this  :-(
-   "check-sprint" check-sprint
+  {"check-sprint" check-sprint
    "watch" watch})
 
 (defn run [cmd opts]

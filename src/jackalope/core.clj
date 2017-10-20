@@ -417,26 +417,4 @@
       (do-sprint-stop! i)
       (println (format "Did a Sprint Stop (#%s) by %s" (:number i) assignee)))))
 
-(comment 
-  ;; Example of importing and finalizing a plan
-  (github!)
-  (def PLAN (import-plan-from-json "16.04.1"))
-  (doseq [d PLAN] (println d))
-  (def MS-CURR 214) ;just planned
-  (def MS-NEXT 215) ;future sprint
-  ;;; be sure you really want to do this!
-  ;;; (def RES (plan! PLAN MS-CURR MS-NEXT))
-)
-
-(comment
-  ;; Example of sweeping a milestone:
-  (github!)
-  (def MS-CURR 214) ;just completed
-  (def MS-NEXT 215) ;next sprint
-  (def ACTIONS (sweep-milestone MS-CURR MS-NEXT))
-  (doseq [a ACTIONS] (println a))
-  ;;; be sure you really want to do this!
-  ;;; (sweep! ACTIONS)
-)
-
 
