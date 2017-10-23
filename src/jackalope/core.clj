@@ -58,8 +58,41 @@
      (when (= do? :maybe)
        {:label+ :maybe}))))
 
-(defn edits-from
-  "Composes updates to make to issues, per the specified plan"
+(defn actions-for
+  "Composes github actions to make to issues, per the specified plan.
+
+   Actions will *only* address issues in the specified plan. E.g., if there are
+   issues in ms-curr that are not in the plan, no actions will be produced
+   that change those issues.
+
+   ms-curr should be the number of the milestone to be finalized per the plan.
+
+   ms-next should be the number of the next milestone. I.e., the milestone that
+   represents the next future sprint, to which we'll roll-over issues that we
+   chose not to do in ms-curr. E.g. 175
+
+   plan should be a collection of hash-maps where each hash-map represents a
+   decision and contains these keys:
+     :number Github issue number, e.g. 4123
+     :do?    Team's decision regarding whether to do the work.
+             Should be one of :yes, :no, :maybe
+   Example hash-map:
+     {:number 4123 :do? :yes}
+
+   The composed actions represent these rules; for each issue in the plan:
+   * Assign ms-curr milestone if :do? is :yes or :maybe
+   * Assign ms-next milestone if :do? is :no
+   * Add 'maybe' label if :do? is :maybe
+
+   This function does not perform any of the actions. It returns the actions
+   represented like so:
+
+   {:edits [sequence of edit action representations, as hash-maps]
+    :maybes [sequence of maybe label add representations, as hash-maps]"
+  ;; TODO: use of ms-curr could be removed if the just-planned issues were
+  ;; already assigned the current milestone (e.g., the nominations milestone).
+  ;; ms-curr is only used right now as "the new milestone to move 'yes' issues
+  ;; to and then consider active for the sprint
   [plan ms-curr ms-next]
   ;; TODO: if we stop using ms-curr, we'd just NOOP the yes issues
   (let [edits (map (editor ms-curr ms-next) plan)]
@@ -143,54 +176,16 @@
 ;; Main use cases
 ;;
 
-(defn plan* [plan ms-curr ms-next]
-  (let [{:keys [maybes edits]} (edits-from plan ms-curr ms-next)]
-    {:edits edits
-     :maybes maybes}))
-
 (defn plan!
-  "Updates the specified Github repo issues based on the specified plan.
-   This *only* addresses issues in the specified plan. E.g., if there are
-   issues assigned ms-curr that are not in the plan, those issues will
-   remain in ms-curr, untouched.
-
-   For each issue in the plan:
-   * Assigns ms-curr milestone if :do? is :yes or :maybe
-   * Assigns ms-next milestone if :do? is :no
-   * Adds 'maybe' label if :do? is :maybe
-
-   The first argument must contain all necessary 'connection' data.
-
-   ms-curr should be the number of the milestone to be finalized per the plan.
-
-   ms-next should be the number of the next milestone. I.e., the milestone that 
-   represents the next future sprint, to which we'll roll-over issues that we
-   chose not to do in ms-curr. E.g. 175
-   
-   plan should be a collection of hash-maps where each hash-map represents a 
-   decision and contains these keys:
-     :number Github issue number, e.g. 4123
-     :do?    Team's decision regarding whether to do the work.
-             Should be one of :yes, :no, :maybe
-   Example hash-map:
-     {:number 4123 :do? :yes}
-
-   Returns a report as a hash-map:
-   {:edited [sequence of results from each issue edit]
-    :maybes [sequence of results from each maybe label add]"
-  [plan ms-curr ms-next]
-  ;; TODO: change to take output of plan* (actions) 
+  "Runs the specified actions, ostensibly based on a new sprint plan. 
+   (See actions-for, for details on how the actions are composed.)"
+  [{:keys [edits maybes]}]
+  ;; TODO: This is really just a general 'run actions' function; rename?
   ;; TODO: return specific data that would be usable for fully undo-ing
-  ;; TODO: use of ms-curr could be removed if the just-planned issues were 
-  ;; already assigned the current milestone (e.g., the nominations milestone).
-  ;; ms-curr is only used right now as "the new milestone to move 'yes' issues
-  ;; to and then consider active for the sprint"
-  (let [{:keys [maybes edits] :as eds} (plan* plan ms-curr ms-next)
-        conn (github-conn)]
+  (let [conn (github-conn)]
     (doseq [e edits] (github/edit-issue conn e))
     (doseq [n (map :number maybes)]
-      (github/add-a-label conn n :maybe))
-    eds))
+      (github/add-a-label conn n :maybe))))
 
 ; TODO: support auto-gen of next milestone; stop asking for ms-next
 (defn sweep-milestone
@@ -294,7 +289,7 @@
    (presumably, to be posted as an issue comment)."
   [plan]
   (str
-         "I've saved the plan!\n\n"
+         "The plan looks like:\n\n"
          "__Yes:__\n\n"
          (plan->table-md plan :yes)
          "\n\n"
@@ -330,58 +325,109 @@
  [{:keys [number]} coll]
   (remove #(= number (:number %)) coll))
 
+(defn sprint-start*
+  "Returns a description of a sprint start, using the specified issue as the 
+   sprint start request. The issue must already be assigned a valid milestone."
+  [issue]
+  (let [ms (:milestone issue)
+        ms-num (:number ms)
+        ms-title (:title ms)
+        plan (without issue (+titles (fetch-plan-from-zenhub ms-num)))]
+    {:issue issue
+     :ms-num ms-num
+     :ms-title ms-title
+     :plan plan
+     :plan-tbl (plan->github-markdown-table plan)
+     :plan-str (plan->ms-desc plan)}))
+
+(comment
+  (sprint-start*
+   {:number 101
+    :milestone {:number 3 :title "My favourite milestone!"}}))
+
 (defn do-sprint-start!
-  "Handles a request to start a sprint, as specified in issue. The issue must
-   already be assigned a valid Milestone.
+  "Given a sprint start request, performs the sprint start.
+
+   Assums the current milestone is ms-num.
+   Assumes the next milestone already exists, as ms-num + 1.
 
    Performs these steps:
    * Composes a sprint plan based on data from GitHub & ZenHub
    * Moves 'no' items to next milestone
    * Writes a comment to the issue, showing the plan as a table
    * Sets the Milestone's description to contain the plan data
-   * Closes the issue"
-  ;;TODO: don't destructively reset the Milestone's description.
-  ;;      maybe fetch the desc and append? (requires careful handling)
-  [issue]
-  (let [ms (:milestone issue)
-        ms-num (:number ms)
-        ms-title (:title ms)
-        _ (println "Fetching plan...")
-        plan (without issue (+titles (fetch-plan-from-zenhub ms-num)))
-        plan-tbl (plan->github-markdown-table plan)
-        plan-str (plan->ms-desc plan)]
-    (println "Running plan on repo...")
-    (plan! plan ms-num (inc ms-num))
-    (github/comment-on-issue (github-conn) issue plan-tbl)
-    (github/set-milestone-desc (github-conn) ms-num ms-title plan-str)
-    (github/close-issue (github-conn) issue)
-    plan))
+   * Closes the issue
+
+   Returns a report of the issue edits made, as a hash-map, like:
+   {:edited [sequence of results from each issue edit]
+    :maybes [sequence of results from each maybe label add]}"
+  [{:keys [plan ms-num ms-title plan-tbl plan-str issue]} conn]
+  (let [ms-curr ms-num
+        ms-next (inc ms-curr)
+        actions (actions-for plan ms-curr ms-next)
+        comment (format
+                 "The plan has %s decisions, resulting in %s edits and %s maybe labels..."
+                 (count plan) (count (:edits actions)) (count (:maybes actions)))]
+    (github/comment-on-issue conn issue comment)
+    (plan! actions)
+    (github/comment-on-issue conn issue
+                             (format "Updated issues. The plan looks like...\n\n%s"
+                                     plan-tbl))
+    ;;TODO: don't destructively reset the Milestone's description.
+    ;;      maybe fetch the desc and append? (requires careful handling)
+    (github/set-milestone-desc conn ms-curr ms-title plan-str)
+    (github/comment-on-issue 
+     conn 
+     issue
+     "Saved the plan. The sprint has started.")
+    (github/close-issue conn issue)))
 
 (defn plan-from-ms [ms]
   (-> ms
       :description
       ms-desc->plan))
 
-(defn do-sprint-stop-comments [plan issues issue]
+(defn do-retro-as-comment [plan issues issue]
   (doseq [[_ md] (retro/as-markdowns plan issues)]
     (github/comment-on-issue (github-conn) issue md)))
+
+(defn sprint-stop* [issue]
+  (let [ms-curr (get-in issue [:milestone :number])
+        ms-next (inc ms-curr)
+        ms (github/fetch-milestone (github-conn) ms-curr)
+        plan (plan-from-ms ms)
+        issues (with-zenhub (fetch-all-issues ms-curr plan))
+        actions (without issue (sweep-milestone ms-curr ms-next))]
+    {:issue issue
+     :ms-num ms-curr
+     :issues issues
+     :actions actions
+     :plan plan}))
 
 ;TODO: to be complete, for any issue that we didn't record estimate data for in
 ;      original plan, need to fetch individually from ZenHub before generating
 ;      retro report (or live with 'missing' estimate data in retro)
-(defn do-sprint-stop! [issue]
-  (let [ms-num (get-in issue [:milestone :number])
-        ms (github/fetch-milestone (github-conn) ms-num)
-        plan (plan-from-ms ms)
-        issues (with-zenhub (fetch-all-issues ms-num plan))
-        actions (without issue (sweep-milestone ms-num (inc ms-num)))]
-    (sweep! actions)
-    (do-sprint-stop-comments plan issues issue)
-    (github/close-issue (github-conn) issue)
-    {:milestone ms
-     :actions actions
-     :plan plan
-     :issues issues}))
+(defn do-sprint-stop!
+  "Given a sprint stop request, performs the sprint start.
+
+   Assumes the next milestone already exists, as ms-num + 1.
+
+   Performs these steps:
+   * Sweeps unclosed issues to next milestone
+   * Publishes retrospective info to the issue as a set of comments / tables
+   * Closes the issue"
+  [{:keys [issue actions plan issues]} conn]
+  (github/comment-on-issue conn issue
+                           (format
+                            "Sweeping issues (%s actions)... retrospective report on the way..."
+                            (count actions)))
+  (sweep! actions)
+  (do-retro-as-comment plan issues issue)
+  (github/comment-on-issue 
+   conn 
+   issue
+   "Swept issues and filed retrospective report. The sprint is stopped.")
+  (github/close-issue conn issue))
 
 (defn find-work
   "Queries GitHub for assigned work that should be handled.
@@ -399,16 +445,46 @@
                                                            assignee "stop"))]
      {:stop stops})))
 
-(defn check-sprint [assignee]
+(defn preview-sprint-start [{:keys [plan ms-num ms-title plan-tbl plan-str issue]}]
+  (println "------ Sprint start preview ------")
+  (println (format "Issue #%s" (:number issue)))
+  (println (format "Milestone #%s, '%s'" ms-num ms-title))
+  (println plan-tbl))
+
+(defn preview-sprint-stop [{:keys [issue actions plan issues]}]
+  (println "------ Sprint stop preview ------")
+  (println (format "Issue #%s" (:number issue)))
+  (let [ms (:milestone issue)]
+    (println (format "Milestone #%s, '%s'" (:number ms) (:title ms)))
+    (doseq [a actions]
+      (println a))))
+
+(defn check-sprint [assignee preview?]
   (println "Checking sprint for" assignee)
   (let [work-issues (find-work assignee)]
-    (println "Work issues:" work-issues)
     (doseq [i (:start work-issues)]
-      (println (format "Doing a Sprint Start (#%s) by %s" (:number i) assignee) "...")
-      (do-sprint-start! i)
-      (println "Done."))
+      (let [sprint-start (sprint-start* i)]
+        (if preview?
+          (preview-sprint-start sprint-start)
+          (do
+            (println (format "Starting a sprint, per issue #%s..."
+                             (:number i)) "...")
+            (github/comment-on-issue (github-conn) i "Starting the sprint...")
+            (println (format "Processing plan with %s decisions..."
+                             (count (:plan sprint-start))))
+            (do-sprint-start! sprint-start (github-conn))
+            (println "Done.")))))
     (doseq [i (:stop work-issues)]
-      (do-sprint-stop! i)
-      (println (format "Did a Sprint Stop (#%s) by %s" (:number i) assignee)))))
+      (let [sprint-stop (sprint-stop* i)]
+        (if preview?
+          (preview-sprint-stop sprint-stop)
+          (do
+            (println (format "Stopping a sprint, per issue #%s..."
+                             (:number i)) "...")
+            (github/comment-on-issue (github-conn) i "Stopping the sprint...")
+            (println (format "Processing %s issues from sprint plan..."
+                             (count (:issues sprint-stop))))
+            (do-sprint-stop! sprint-stop (github-conn))
+            (println (format "Did a Sprint Stop (#%s) by %s" (:number i) assignee))))))))
 
 

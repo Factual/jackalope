@@ -85,7 +85,7 @@
         plan (a-plan a b c)]
 
     ;; the main event
-    (plan! plan MILESTONE-A MILESTONE-B)
+    (plan! (actions-for plan MILESTONE-A MILESTONE-B))
     
     ;; Lookup all three issues and verify state
     (let [[a b c]

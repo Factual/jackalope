@@ -48,8 +48,8 @@
   (str "The following errors occurred while parsing your command:\n\n"
        (clojure.string/join \newline errors)))
 
-(defn check-sprint [{:keys [assignee]}]
-  (core/check-sprint assignee))
+(defn check-sprint [{:keys [assignee preview]}]
+  (core/check-sprint assignee preview))
 
 (defn watch [{:keys [assignee] :as opts}]
   (println "watching...")
