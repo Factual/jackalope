@@ -356,11 +356,7 @@
    * Moves 'no' items to next milestone
    * Writes a comment to the issue, showing the plan as a table
    * Sets the Milestone's description to contain the plan data
-   * Closes the issue
-
-   Returns a report of the issue edits made, as a hash-map, like:
-   {:edited [sequence of results from each issue edit]
-    :maybes [sequence of results from each maybe label add]}"
+   * Closes the issue"
   [{:keys [plan ms-num ms-title plan-tbl plan-str issue]} conn]
   (let [ms-curr ms-num
         ms-next (inc ms-curr)
