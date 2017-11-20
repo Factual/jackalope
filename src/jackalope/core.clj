@@ -300,6 +300,7 @@
   (format "<!--PLAN %s -->" (pr-str plan)))
 
 (defn ms-desc->plan [s]
+  (assert (> (count s) 9) "Plan's description is invalid (too short)")
   (read-string
    (subs s 9 (- (count s) 4))))
 

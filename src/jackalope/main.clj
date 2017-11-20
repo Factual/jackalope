@@ -49,6 +49,7 @@
        (clojure.string/join \newline errors)))
 
 (defn check-sprint [{:keys [assignee preview]}]
+  (assert assignee "You must specify an assignee, with -a or --assignee")
   (core/check-sprint assignee preview))
 
 (defn watch [{:keys [assignee] :as opts}]
