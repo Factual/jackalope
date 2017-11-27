@@ -23,7 +23,7 @@
      :done-as-planned  the plan said yes and the issue was completed
      :done-as-maybe    the plan said maybe and the issue was completed
      :not-done-maybe
-     :late-add         wasn't included in the plan, but was completed 
+     :late-add         (should already be marked as such)
                        (e.g., late-add or hotfix)
      :skipped-as-no
      :incomplete       the plan said yes but the issue was not completed
@@ -33,13 +33,12 @@
   (cond
     (and (is/open? issue) (not (no? issue))
          (zh/blocked? issue))                :blocked
-    (and (is/closed? issue) (yes? issue))     :done-as-planned
-    (and (is/closed? issue) (maybe? issue))   :done-as-maybe
+    (and (is/closed? issue) (yes? issue))    :done-as-planned
+    (and (is/closed? issue) (maybe? issue))  :done-as-maybe
     (and (is/open? issue) (maybe? issue)
          (not (zh/epic? issue)))             :not-done-maybe
-    (and (nil? (:do? issue))
-         (is/closed? issue))                  :late-add
-    (and (is/open? issue) (no? issue))        :skipped-as-no
+    (:late-add issue)                        :late-add
+    (and (is/open? issue) (no? issue))       :skipped-as-no
     (and (is/open? issue) (yes? issue)
          (not (zh/epic? issue)))             :incomplete
     :else                                    :inscrutable))

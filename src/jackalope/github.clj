@@ -81,7 +81,7 @@
           (fetch-issues-and-prs-by-milestone conn ms-num)))
 
 (defn fetch-closed-issues-by-milestone
-  "Returns the issues assigned to the specified milestone"
+  "Returns closed issues assigned to the specified milestone"
   [{:keys [user repo github-token]} ms-num]
   (let [is (issues/issues user repo
                           {:oauth-token github-token

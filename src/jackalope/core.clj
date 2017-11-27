@@ -218,7 +218,7 @@
    ; An 'unmaybe', which removes the 'maybe' label
    {:number [issue number] 
     :action :unmaybe}"
-  [ms-curr ms-next]
+  [ms-curr ms-next closed-ahead]
   ;; TODO: Possible optimization:
   ;; If a ticket was "maybe", is getting carried forward, and is also a "maybe"
   ;; in the new plan: leave the "maybe" label in place. (Currently, we clear
@@ -226,8 +226,7 @@
   ;; labels, which can be redundant when the ticket already had the label.)
   ;; Caveat: The sweep-milestone step is currently conceptually separate from
   ;;   the plan! step. Not sure if it's worth coupling them for this
-  (let [msis (doall (github/fetch-issues-by-milestone (github-conn) ms-curr))
-        closed-ahead (github/fetch-closed-issues-by-milestone (github-conn) ms-next)]
+  (let [msis (doall (github/fetch-issues-by-milestone (github-conn) ms-curr))]
     (concat
      ;; issues closed in ms-next should be late-adds in ms-curr:
      (map (fn [n]
@@ -266,7 +265,10 @@
 
 (defn with-zenhub
   "Decorates each issue with ZenHub data, e.g. whether each issue is an epic.
+   For issues marked as [:late-add true], will explicitly fetch the estimate
+   from ZenHub and add as :estimate.
    (See zenhub/++ for more details.)
+
    Returns issues unchanged if we don't have zenhub credentials."
   [issues]
   (if (zenhub?)
@@ -289,7 +291,6 @@
    (presumably, to be posted as an issue comment)."
   [plan]
   (str
-         "The plan looks like:\n\n"
          "__Yes:__\n\n"
          (plan->table-md plan :yes)
          "\n\n"
@@ -388,22 +389,45 @@
   (doseq [[_ md] (retro/as-markdowns plan issues)]
     (github/comment-on-issue (github-conn) issue md)))
 
+(defn mark-late-adds
+  "Compares each issue in issues against plan. Returns issues, with any
+   late add issue marked with :late-add true. 
+
+   An issue is a late add if it is closed and the plan marked it as :do? :no, or
+   it wasn't in the plan at all."
+  [plan issues]
+  (let [->nums #(into #{} (map :number %))
+        las (set/difference (->nums (filter #(= "closed" (:state %)) issues))
+                            (->nums (filter #(not= :no (:do? %)) plan)))
+        late? #(contains? las (:number %))]
+    (map 
+     (fn [i]
+       (if (late? i)
+         (assoc i :late-add true)
+         i))
+     issues)))
+
+(defn closed-in [ms-num]
+  (github/fetch-closed-issues-by-milestone (github-conn) ms-num))
+
+(defn union-i [a b]
+  (map first (vals (group-by :number (concat a b)))))
+
 (defn sprint-stop* [issue]
   (let [ms-curr (get-in issue [:milestone :number])
         ms-next (inc ms-curr)
-        ms (github/fetch-milestone (github-conn) ms-curr)
-        plan (plan-from-ms ms)
-        issues (with-zenhub (fetch-all-issues ms-curr plan))
-        actions (without issue (sweep-milestone ms-curr ms-next))]
-    {:issue issue
-     :ms-num ms-curr
-     :issues issues
+        ms      (github/fetch-milestone (github-conn) ms-curr)
+        plan    (plan-from-ms ms)
+        cd-next (closed-in ms-next)
+        issues  (union-i (fetch-all-issues ms-curr plan) cd-next)
+        issues  (with-zenhub (mark-late-adds plan issues))
+        actions (without issue (sweep-milestone ms-curr ms-next cd-next))]
+    {:issue   issue
+     :ms-num  ms-curr
+     :issues  issues
      :actions actions
-     :plan plan}))
+     :plan    plan}))
 
-;TODO: to be complete, for any issue that we didn't record estimate data for in
-;      original plan, need to fetch individually from ZenHub before generating
-;      retro report (or live with 'missing' estimate data in retro)
 (defn do-sprint-stop!
   "Given a sprint stop request, performs the sprint start.
 

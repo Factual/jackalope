@@ -51,6 +51,19 @@
       ;;TODO: throw something meaningful. e.g., this can happen if bad token
       (throw (RuntimeException. (str error))))))
 
+(defn fetch-issue
+  [token repo-id inum]
+  (let [url (format "https://api.zenhub.io/p1/repositories/%s/issues/%s" repo-id inum)
+        {:keys [status headers body error] :as resp}
+        @(http/get url {:headers {"X-Authentication-Token" token}})]
+    (if-not error
+      ;;TODO: validate that we have a useful response? e.g., maybe (assert (= status :ready)) 
+      (json/read-str body)
+      ;;else, stop execution. i'm not sure of format for error string from 
+      ;;  Zenhub... punting by just str'ing it out
+      ;;TODO: throw something meaningful. e.g., this can happen if bad token
+      (throw (RuntimeException. (str error))))))
+
 (defn fetch-pipelines
   "issue-nums must be a collection of issue numbers as numbers"
   ([token repo-id]
@@ -107,6 +120,13 @@
   (into #{} (map #(get % "issue_number")
                  (get (fetch-epics token repo-id) "epic_issues"))))
 
+(defn est-if-late-add [token repo-id]
+  (fn [issue]
+    (if (:late-add issue)
+      (let [zi (fetch-issue token repo-id (:number issue))]
+        (assoc issue :estimate (get-in zi ["estimate" "value"])))
+      issue)))
+
 (defn- _++ [issues pipelines ens]
   (let [n->zh (issue-nums->zhdata pipelines)]
     (map
@@ -120,10 +140,14 @@
 ;      (include a higher level refactor?)
 ;TODO: can be more complete & useful, by including pipeline name(?)
 (defn ++ [token repo-id issues]
-  (_++ issues
-       (let [issue-nums (map :number issues)] 
-         (fetch-pipelines token repo-id issue-nums))
-       (fetch-epic-issue-nums token repo-id)))
+  (let [issue-nums (map :number issues)
+        issues     (_++ issues
+                        (fetch-pipelines token repo-id issue-nums)
+                        (fetch-epic-issue-nums token repo-id))]
+    ;; add estimates to late-add issues
+    ;; (requires separate calls to ZenHub   :-(
+    ;; doing this last, since _++ will overwrite :estimates(?)
+    (map (est-if-late-add token repo-id) issues)))
 
 (defn epic? [i]
   (:epic? i))
