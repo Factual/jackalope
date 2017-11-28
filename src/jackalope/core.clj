@@ -149,10 +149,12 @@
   "Returns the ZenHub pipeline data for issue numbers in the specified milestone"
   [ms-num]
   (let [{:keys [repo zenhub-token] :as gc} (github-conn)
+        ;;TODO: centralize fetch-repo usage to get repo-id (maybe at init?)
         repo-id (:id (github/fetch-repo gc))
+        zcon (zenhub/conn zenhub-token repo-id)
         issue-nums (map :number (github/fetch-issues-by-milestone
-                                           (github-conn) ms-num))]
-    (zenhub/fetch-pipelines zenhub-token repo-id issue-nums)))
+                                 (github-conn) ms-num))]
+    (zenhub/fetch-pipelines zcon issue-nums)))
 
 (defn as-plan
   "Takes ZenHub boards data and converts to a concise plan structure; returns a
@@ -273,9 +275,9 @@
   [issues]
   (if (zenhub?)
     (let [gc (github-conn)
-          zenhub-token (:zenhub-token gc)
-          repo-id (:id (github/fetch-repo gc))]
-      (zenhub/++ zenhub-token repo-id issues))
+          ;;TODO: centralize fetch-repo usage to get repo-id (maybe at init?)
+          zcon (zenhub/conn (:zenhub-token gc) (:id (github/fetch-repo gc)))]
+      (zenhub/++ zcon issues))
     issues))
 
 (defn plan->table-md [plan do?]
@@ -400,6 +402,7 @@
         las (set/difference (->nums (filter #(= "closed" (:state %)) issues))
                             (->nums (filter #(not= :no (:do? %)) plan)))
         late? #(contains? las (:number %))]
+    ;;TODO: cleanup to be a 1 liner and always add :late-add
     (map 
      (fn [i]
        (if (late? i)

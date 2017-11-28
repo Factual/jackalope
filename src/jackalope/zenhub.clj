@@ -4,11 +4,21 @@
             [clojure.data.json :as json]))
 
 ;
-; Wherever functions take a repo-id, it's the underlying github repo id, like:
+; Wherever functions take a repo-id, it's the underlying 
 ; 1800123
 ; (it's *not* the human readable repo name)
 ;
 
+
+(defn conn
+  "Returns a connection object (simple hash-map) constructed from the specified
+   token and repo-id. token must be a valid ZenHub token. repo-id must be the
+   underlying github repo id, e.g. 1800123 (NOT the human readable repo name)."
+  [token repo-id]
+  (assert (> (count token) 40) "You've specified a short ZenHub token value")
+  (assert (< (count (str repo-id)) 40) "You've specified a crazy long repo-id")
+  {:token token
+   :repo-id repo-id})
 
 (defn keep-nums [issues inums]
   (filter 
@@ -16,14 +26,11 @@
      (contains? inums (x "issue_number")))
    issues))
 
-(defn prune [inums]
-  (fn [pipe] ))
-
 (defn keep-in-pipeline [inums p]
   (update-in p ["issues"] keep-nums inums))
 
 (defn fetch-boards
-  "Returns ZenHub board data for the specified repository. 
+  "Returns ZenHub board data for the specified connection.
 
    Returned hash-map is like:
      'pipelines'  [PIPELINES]
@@ -38,40 +45,72 @@
    hash-map is like:
      'issue_number'  [ISSUE_NUMBER]
      'estimate'      [ESTIMATE(hash-map)]
-     'position'      [POSITION_NDX]"
-  [token repo-id]
+     'position'      [POSITION_NDX]
+
+   Throws an ExceptionInfo (a subclass of RuntimeException) if the server's
+   response status is anything other than 200."
+  [{:keys [token repo-id]}]
   (let [url (format "https://api.zenhub.io/p1/repositories/%s/board" repo-id)
         {:keys [status headers body error] :as resp}
-        @(http/get url {:headers {"X-Authentication-Token" token}})]
-    (if-not error
-      ;;TODO: validate that we have a useful response? e.g., maybe (assert (= status :ready)) 
-      (json/read-str body)
-      ;;else, stop execution. i'm not sure of format for error string from 
-      ;;  Zenhub... punting by just str'ing it out
-      ;;TODO: throw something meaningful. e.g., this can happen if bad token
-      (throw (RuntimeException. (str error))))))
+        @(http/get url {:headers {"X-Authentication-Token" token}})
+        data (json/read-str body)]
+    (if (= status 200)
+      data
+      (throw (ex-info (data "message") {:url url})))))
 
 (defn fetch-issue
-  [token repo-id inum]
+  "Returns a hash-map of the ZenHub data for the specified issue, fetched using
+   the specified connection. The returned data looks like:
+     {\"plus_ones\" [], \"pipeline\" {\"name\" \"To Do\"}, \"is_epic\" false}
+
+   Throws an ExceptionInfo (a subclass of RuntimeException) if the server's
+   response status is anything other than 200."
+  [{:keys [token repo-id]} inum]
   (let [url (format "https://api.zenhub.io/p1/repositories/%s/issues/%s" repo-id inum)
         {:keys [status headers body error] :as resp}
-        @(http/get url {:headers {"X-Authentication-Token" token}})]
-    (if-not error
-      ;;TODO: validate that we have a useful response? e.g., maybe (assert (= status :ready)) 
-      (json/read-str body)
-      ;;else, stop execution. i'm not sure of format for error string from 
-      ;;  Zenhub... punting by just str'ing it out
-      ;;TODO: throw something meaningful. e.g., this can happen if bad token
-      (throw (RuntimeException. (str error))))))
+        @(http/get url {:headers {"X-Authentication-Token" token}})
+        data (json/read-str body)]
+    (if (= status 200)
+      data
+      (throw (ex-info (data "message") {:url url})))))
 
 (defn fetch-pipelines
-  "issue-nums must be a collection of issue numbers as numbers"
-  ([token repo-id]
-   (-> (fetch-boards token repo-id)
+  "issue-nums must be a collection of issue numbers as numbers
+
+   Throws an ExceptionInfo (a subclass of RuntimeException) if the server's
+   response status is anything other than 200."
+  ([conn]
+   (-> (fetch-boards conn)
        (get "pipelines")))
-  ([token repo-id issue-nums]
+  ([conn issue-nums]
    (map #(keep-in-pipeline (into #{} issue-nums) %)
-        (fetch-pipelines token repo-id))))
+        (fetch-pipelines conn))))
+
+(defn fetch-epics 
+  "Returns metadata for ZenHub epics in the specified repository.
+
+   Returns a collection of hash-maps where each hash-map represents an epic and
+   looks like:
+     'issue_number'  [ISSUE_NUMBER]
+     'repo_id'       [REPO_ID]
+     'issue_url'     [ISSUE_URL]
+
+   Throws an ExceptionInfo (a subclass of RuntimeException) if the server's
+   response status is anything other than 200."
+  [{:keys [token repo-id]}]
+  (let [url (format "https://api.zenhub.io/p1/repositories/%s/epics" repo-id)
+        {:keys [status headers body error] :as resp}
+        @(http/get url {:headers {"X-Authentication-Token" token}})
+        data (json/read-str body)]
+    (if (= status 200)
+      data
+      (throw (ex-info (data "message") {:url url})))))
+
+(defn fetch-epic-issue-nums
+  "Returns the set of epic issue numbers for the specified repo."
+  [conn]
+  (into #{} (map #(get % "issue_number")
+                 (get (fetch-epics conn) "epic_issues"))))
 
 (defn is->m [pipeline]
   (let [name (get pipeline "name")]
@@ -94,36 +133,10 @@
 
   (apply merge (map is->m pipelines)))
 
-(defn fetch-epics 
-  "Returns metadata for ZenHub epics in the specified repository.
-
-   Returns a collection of hash-maps where each hash-map represents an epic and
-   looks like:
-     'issue_number'  [ISSUE_NUMBER]
-     'repo_id'       [REPO_ID]
-     'issue_url'     [ISSUE_URL]"
-  [token repo-id]
-  (let [url (format "https://api.zenhub.io/p1/repositories/%s/epics" repo-id)
-        {:keys [status headers body error] :as resp}
-        @(http/get url {:headers {"X-Authentication-Token" token}})]
-    (if-not error
-      ;;TODO: validate that we have a useful response? e.g., maybe (assert (= status :ready)) 
-      (json/read-str body)
-      ;;else, stop execution. i'm not sure of format for error string from 
-      ;;  Zenhub... punting by just str'ing it out
-      ;;TODO: throw something meaningful. e.g., this can happen if bad token
-      (throw (RuntimeException. (str error))))))
-
-(defn fetch-epic-issue-nums
-  "Returns the set of epic issue numbers for the specified repo."
-  [token repo-id]
-  (into #{} (map #(get % "issue_number")
-                 (get (fetch-epics token repo-id) "epic_issues"))))
-
-(defn est-if-late-add [token repo-id]
+(defn est-if-late-add [conn]
   (fn [issue]
     (if (:late-add issue)
-      (let [zi (fetch-issue token repo-id (:number issue))]
+      (let [zi (fetch-issue conn (:number issue))]
         (assoc issue :estimate (get-in zi ["estimate" "value"])))
       issue)))
 
@@ -139,15 +152,15 @@
 ;TODO: can do as just one call, since pipes have 'is_epic'?
 ;      (include a higher level refactor?)
 ;TODO: can be more complete & useful, by including pipeline name(?)
-(defn ++ [token repo-id issues]
+(defn ++ [conn issues]
   (let [issue-nums (map :number issues)
         issues     (_++ issues
-                        (fetch-pipelines token repo-id issue-nums)
-                        (fetch-epic-issue-nums token repo-id))]
+                        (fetch-pipelines conn issue-nums)
+                        (fetch-epic-issue-nums conn))]
     ;; add estimates to late-add issues
     ;; (requires separate calls to ZenHub   :-(
     ;; doing this last, since _++ will overwrite :estimates(?)
-    (map (est-if-late-add token repo-id) issues)))
+    (map (est-if-late-add conn) issues)))
 
 (defn epic? [i]
   (:epic? i))

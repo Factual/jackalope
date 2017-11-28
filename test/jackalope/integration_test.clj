@@ -126,7 +126,8 @@
         rc (github/edit-issue (github-conn) {:number (:number c)
                                              :state :closed})
         _  (assert (:closed_at rc))
-        acts (sweep-milestone MILESTONE-A MILESTONE-B)]
+        ;; TODO: explicitly test closed-ahead functionality
+        acts (sweep-milestone MILESTONE-A MILESTONE-B [])]
 
     ;; -- Verify actions --
     ;; Issue A -- unmaybe'd and swept forward
