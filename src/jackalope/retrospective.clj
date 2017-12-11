@@ -56,7 +56,8 @@
     issue))
 
 (defn inum->i
-  "Returns an index (as a hash-map) of issue number to :do?"
+  "Returns an index (as a hash-map) of issue number to plan rec, where a plan 
+   rec has keys like: :number, :do?, :estimate"
   [plan]
   (into {}
         (for [{:keys [number] :as p} plan] [number p])))
@@ -111,15 +112,28 @@
 (defn as-markdowns
   "Returns the retrospective report as a hash-map keyed by outcome. Each value
    is the markdown representation of the corresponding outcome."
-  [plan issues]
-  (let [retro (retrospective plan issues)]
-    (reduce
-     (fn [acc [outcome-kw outcome-desc]]
-       (assoc acc outcome-kw
-              (apply str
-                     "## " outcome-desc "\n"
-                     (if-let [issues (retro outcome-kw)]
-                       (format "%s\n" (->md-table issues))
-                       "_(none)_\n"))))
-     {}
-     OUTCOMES)))
+  [retro]
+  (reduce
+   (fn [acc [outcome-kw outcome-desc]]
+     (assoc acc outcome-kw
+            (apply str
+                   "## " outcome-desc "\n"
+                   (if-let [issues (retro outcome-kw)]
+                     (format "%s\n" (->md-table issues))
+                     "_(none)_\n"))))
+   {}
+   OUTCOMES))
+
+(defn as-issues
+  "Returns the issues from the retrospective as a collection of hash-maps, where
+   each hash-map is an issue and the entries are:
+     :number
+     :assignee
+     :state
+     :do?
+     :estimate
+     :outcome"
+  [retro]
+  (let [+login #(assoc % :assignee (get-in % [:assignee :login]))
+        skeys #(select-keys % [:number :assignee :do? :estimate :outcome])]
+    (map (comp +login skeys) (mapcat second retro))))

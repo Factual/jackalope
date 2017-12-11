@@ -387,10 +387,6 @@
       :description
       ms-desc->plan))
 
-(defn do-retro-as-comment [plan issues issue]
-  (doseq [[_ md] (retro/as-markdowns plan issues)]
-    (github/comment-on-issue (github-conn) issue md)))
-
 (defn mark-late-adds
   "Compares each issue in issues against plan. Returns issues, with any
    late add issue marked with :late-add true. 
@@ -417,41 +413,60 @@
   (map first (vals (group-by :number (concat a b)))))
 
 (defn sprint-stop* [issue]
-  (let [ms-curr (get-in issue [:milestone :number])
+  (let [ms (:milestone issue)
+        ms-curr (:number ms)
         ms-next (inc ms-curr)
-        ms      (github/fetch-milestone (github-conn) ms-curr)
-        plan    (plan-from-ms ms)
+        ms-title (:title ms)
+        plan    (ms-desc->plan (get-in issue [:milestone :description]))
         cd-next (closed-in ms-next)
         issues  (union-i (fetch-all-issues ms-curr plan) cd-next)
         issues  (with-zenhub (mark-late-adds plan issues))
-        actions (without issue (sweep-milestone ms-curr ms-next cd-next))]
+        actions (without issue (sweep-milestone ms-curr ms-next cd-next))
+        retro   (retro/retrospective plan issues)]
     {:issue   issue
      :ms-num  ms-curr
+     :ms-title ms-title
      :issues  issues
      :actions actions
-     :plan    plan}))
+     :plan    plan
+     :retro   retro}))
+
+(defn do-reporting [{:keys [issue plan issues ms-num]} conn]
+  (let [retro (retro/retrospective plan issues)
+        ris (retro/as-issues retro)
+        outf (format "issues-retro.%s.edn" ms-num)]
+    (doseq [[_ md] (retro/as-markdowns retro)]
+      ;; add retro sections to issue, as markdown
+      (github/comment-on-issue conn issue md))
+    ;; write file of retro issues
+    (spit outf (pr-str ris))
+    outf))
 
 (defn do-sprint-stop!
-  "Given a sprint stop request, performs the sprint start.
+  "Given a sprint stop request, performs the sprint stop.
 
    Assumes the next milestone already exists, as ms-num + 1.
 
    Performs these steps:
    * Sweeps unclosed issues to next milestone
    * Publishes retrospective info to the issue as a set of comments / tables
-   * Closes the issue"
-  [{:keys [issue actions plan issues]} conn]
+   * Closes the issue
+   * Writes an issues/retro file in the form of issues records
+
+   Returns the filename for the issues/retro file."
+  [{:keys [issue actions plan issues ms-num] :as stop} conn]
   (github/comment-on-issue conn issue
                            (format
                             "Sweeping issues (%s actions)... retrospective report on the way..."
                             (count actions)))
   (sweep! actions)
-  (do-retro-as-comment plan issues issue)
-  (github/comment-on-issue 
-   conn 
-   issue
-   "Swept issues and filed retrospective report. The sprint is stopped.")
-  (github/close-issue conn issue))
+  (let [outf (do-reporting stop conn)]
+    (github/comment-on-issue 
+     conn 
+     issue
+     "Swept issues and filed retrospective report. The sprint is stopped.")
+    (github/close-issue conn issue)
+    outf))
 
 (defn find-work
   "Queries GitHub for assigned work that should be handled.
@@ -475,11 +490,21 @@
   (println (format "Milestone #%s, '%s'" ms-num ms-title))
   (println plan-tbl))
 
+(defn print-outcomes [retro]
+  (doseq [[outcome issues] retro] 
+    (println "---" (name outcome) "---")
+    (doseq [{:keys [number assignee title]} issues]
+      (println number (:login assignee) title))))
+
 (defn preview-sprint-stop [{:keys [issue actions plan issues]}]
   (println "------ Sprint stop preview ------")
   (println (format "Issue #%s" (:number issue)))
-  (let [ms (:milestone issue)]
+  (let [retro (retro/retrospective plan issues)
+        ms (:milestone issue)]
     (println (format "Milestone #%s, '%s'" (:number ms) (:title ms)))
+    (println "Outcomes:")
+    (print-outcomes retro)
+    (println "Actions:")
     (doseq [a actions]
       (println a))))
 
@@ -508,7 +533,6 @@
             (github/comment-on-issue (github-conn) i "Stopping the sprint...")
             (println (format "Processing %s issues from sprint plan..."
                              (count (:issues sprint-stop))))
-            (do-sprint-stop! sprint-stop (github-conn))
-            (println (format "Did a Sprint Stop (#%s) by %s" (:number i) assignee))))))))
-
-
+            (let [outf (do-sprint-stop! sprint-stop (github-conn))]
+              (println (format "Did a Sprint Stop (#%s) by %s" (:number i) assignee))
+              (println "Wrote issues/retro:" outf))))))))
