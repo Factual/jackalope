@@ -137,3 +137,39 @@
   (let [+login #(assoc % :assignee (get-in % [:assignee :login]))
         skeys #(select-keys % [:number :assignee :do? :estimate :outcome])]
     (map (comp +login skeys) (mapcat second retro))))
+
+
+(defn tot-est [issues]
+  (reduce + (filter identity (map :estimate issues))))
+
+(defn incomplete? [issues]
+  (some #(= :incomplete (:outcome %)) issues))
+
+(def complete? (complement incomplete?))
+
+(defn by [assignee] #(= (:assignee %) assignee))
+
+(defn did? [issue]
+  (contains? #{:late-add :done-as-planned :done-as-maybe} (:outcome issue)))
+
+(def est>0
+  #(> (second %) 0))
+
+(defn shout-outs
+  "Given issues from a retrospective (i.e., from calling as-issues), indicates
+   assignees who finished all commitments.
+
+   Returns a collection of hash-maps where each hash-map represents a unique 
+   assignee with the assignee's login name as the key and the value is the total
+   estimated level of effort of their completed tasks. Like:
+     {'Sally' 22
+      'Tracy' 12
+      'Pat'   24}"
+  [retro-issues]
+  (into {}
+        (filter est>0
+                (for [a (filter identity (distinct (map :assignee retro-issues)))
+                      :let [is (filter (by a) retro-issues)]
+                      :when (complete? is)
+                      :let [tes (tot-est (filter did? is))]] 
+                  [a tes]))))

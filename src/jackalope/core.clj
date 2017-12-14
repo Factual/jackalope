@@ -434,10 +434,14 @@
 (defn do-reporting [{:keys [issue plan issues ms-num]} conn]
   (let [retro (retro/retrospective plan issues)
         ris (retro/as-issues retro)
+        shouts (retro/shout-outs ris)
         outf (format "issues-retro.%s.edn" ms-num)]
     (doseq [[_ md] (retro/as-markdowns retro)]
       ;; add retro sections to issue, as markdown
       (github/comment-on-issue conn issue md))
+    ;; shout outs
+    (println "Shout outs:")
+    (clojure.pprint/pprint shouts)
     ;; write file of retro issues
     (spit outf (pr-str ris))
     outf))
@@ -500,10 +504,14 @@
   (println "------ Sprint stop preview ------")
   (println (format "Issue #%s" (:number issue)))
   (let [retro (retro/retrospective plan issues)
+        ris (retro/as-issues retro)
+        shouts (retro/shout-outs ris)
         ms (:milestone issue)]
     (println (format "Milestone #%s, '%s'" (:number ms) (:title ms)))
     (println "Outcomes:")
     (print-outcomes retro)
+    (println "Shout outs:")
+    (clojure.pprint/pprint shouts)
     (println "Actions:")
     (doseq [a actions]
       (println a))))
