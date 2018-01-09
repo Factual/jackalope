@@ -8,37 +8,29 @@
 
 (def DEFAULT-CONF "github-prod.edn")
 
-(defonce ^:private github-atom (atom nil))
+(defonce ^:private conn-atom (atom nil))
 
-(defn github!
-  "Sets your authentication with Github. If cred-file is supplied, reads from
-   that. Otherwise expects your credentials to be in resources/[DEFUALT-CONF].
-   Credentials should be like:
-     {:user 'a_user_or_org'
-      :repo 'a_repo'
-      :github-token 'a_long_token_string_generated_via_your_github_acct'}"
-;; TODO: consider fetching repo-id and adding to conf. 
-;;       note that this would make github! non-lazy
+(defn +repo-id [c]
+  (assoc c :repo-id (:id (github/fetch-repo c))))
+
+(defn connect!
   ([cred-file]
      (let [c (read-string (slurp cred-file))]
-       (assert (:user c) "Github credentials must include :user")
-       (assert (:repo c) "Github credentials must include :repo")
-       (assert (:github-token c) "Github credentials must include :github-token")
-       (reset! github-atom c)
+       (assert (:user c) "Credentials must include :user for Github")
+       (assert (:repo c) "Credentials must include :repo for Github")
+       (assert (:github-token c) "Credentials must include :github-token")
+       (reset! conn-atom (+repo-id c))
        true))
   ([]
-     (github! DEFAULT-CONF)))
+     (connect! DEFAULT-CONF)))
 
-(defn github-conn []
-  (or  @github-atom
+(defn conn []
+  (or  @conn-atom
        (throw (IllegalArgumentException.
-               "Github API credentials must be initialized using 'github!'"))))
-
-(defn zenhub? []
-  (get (github-conn) :zenhub-token))
+               "API credentials must be initialized using 'connect!'"))))
 
 (defn set-milestone [issue ms-num]
-  (github/edit-issue (github-conn) {:number (:number issue)
+  (github/edit-issue (conn) {:number (:number issue)
                                     :milestone ms-num}))
 
 (defn editor [ms-curr ms-next]
@@ -104,7 +96,7 @@
   "Fetches and returns the union of issues assigned to the specified milestone
    and issues specified in plan"
   [ms-num plan]
-  (let [conn (github-conn)
+  (let [conn (conn)
         msis (github/fetch-issues-by-milestone conn ms-num)
         setn  #(set (map :number %))
         mids (setn msis)
@@ -114,16 +106,16 @@
     (concat msis adds)))
 
 (defn fetch-open-issues [ms-num]
-  (->> (github/fetch-issues-by-milestone (github-conn) ms-num)
+  (->> (github/fetch-issues-by-milestone (conn) ms-num)
        (filter issues/open?)))
 
 (defn assign-ms
   "Assigns the specified milestone (ms-num) to the specified issue (issue-num)"
  [issue-num ms-num]
-  (github/edit-issue (github-conn) {:number issue-num
+  (github/edit-issue (conn) {:number issue-num
                                     :milestone ms-num}))
 (defn unmaybe [inum]
-  (github/remove-a-label (github-conn) inum :maybe))
+  (github/remove-a-label (conn) inum :maybe))
 
 (defn zh-do? [pipeline-name]
   (case pipeline-name
@@ -148,13 +140,9 @@
 (defn fetch-pipelines
   "Returns the ZenHub pipeline data for issue numbers in the specified milestone"
   [ms-num]
-  (let [{:keys [repo zenhub-token] :as gc} (github-conn)
-        ;;TODO: centralize fetch-repo usage to get repo-id (maybe at init?)
-        repo-id (:id (github/fetch-repo gc))
-        zcon (zenhub/conn zenhub-token repo-id)
-        issue-nums (map :number (github/fetch-issues-by-milestone
-                                 (github-conn) ms-num))]
-    (zenhub/fetch-pipelines zcon issue-nums)))
+  (let [conn (conn)
+        issue-nums (map :number (github/fetch-issues-by-milestone conn ms-num))]
+    (zenhub/fetch-pipelines conn issue-nums)))
 
 (defn as-plan
   "Takes ZenHub boards data and converts to a concise plan structure; returns a
@@ -184,7 +172,7 @@
   [{:keys [edits maybes]}]
   ;; TODO: This is really just a general 'run actions' function; rename?
   ;; TODO: return specific data that would be usable for fully undo-ing
-  (let [conn (github-conn)]
+  (let [conn (conn)]
     (doseq [e edits] (github/edit-issue conn e))
     (doseq [n (map :number maybes)]
       (github/add-a-label conn n :maybe))))
@@ -228,7 +216,7 @@
   ;; labels, which can be redundant when the ticket already had the label.)
   ;; Caveat: The sweep-milestone step is currently conceptually separate from
   ;;   the plan! step. Not sure if it's worth coupling them for this
-  (let [msis (doall (github/fetch-issues-by-milestone (github-conn) ms-curr))]
+  (let [msis (doall (github/fetch-issues-by-milestone (conn) ms-curr))]
     (concat
      ;; issues closed in ms-next should be late-adds in ms-curr:
      (map (fn [n]
@@ -273,12 +261,7 @@
 
    Returns issues unchanged if we don't have zenhub credentials."
   [issues]
-  (if (zenhub?)
-    (let [gc (github-conn)
-          ;;TODO: centralize fetch-repo usage to get repo-id (maybe at init?)
-          zcon (zenhub/conn (:zenhub-token gc) (:id (github/fetch-repo gc)))]
-      (zenhub/++ zcon issues))
-    issues))
+  (zenhub/++ (conn) issues))
 
 (defn plan->table-md [plan do?]
   (md/table ["Number" "Title"]
@@ -313,7 +296,7 @@
    GitHub to fetches each individual issue in plan, one at a time, for all items
    that are 'maybe' or 'yes' in the plan."
   [plan]
-  (let [conn (github-conn)]
+  (let [conn (conn)]
     (map
      (fn [{:keys [number do?] :as p}]
        (if (contains? #{:maybe :yes} do?)
@@ -407,7 +390,7 @@
      issues)))
 
 (defn closed-in [ms-num]
-  (github/fetch-closed-issues-by-milestone (github-conn) ms-num))
+  (github/fetch-closed-issues-by-milestone (conn) ms-num))
 
 (defn union-i [a b]
   (map first (vals (group-by :number (concat a b)))))
@@ -481,10 +464,10 @@
   ;;       maybe introduce some logical enforcement of one at a time?
   [assignee]
   (merge
-   (when-let [starts (:items (github/search-issues-assigned (github-conn)
+   (when-let [starts (:items (github/search-issues-assigned (conn)
                                                             assignee "start"))]
      {:start starts})
-   (when-let [stops (:items (github/search-issues-assigned (github-conn)
+   (when-let [stops (:items (github/search-issues-assigned (conn)
                                                            assignee "stop"))]
      {:stop stops})))
 
@@ -526,10 +509,10 @@
           (do
             (println (format "Starting a sprint, per issue #%s..."
                              (:number i)) "...")
-            (github/comment-on-issue (github-conn) i "Starting the sprint...")
+            (github/comment-on-issue (conn) i "Starting the sprint...")
             (println (format "Processing plan with %s decisions..."
                              (count (:plan sprint-start))))
-            (do-sprint-start! sprint-start (github-conn))
+            (do-sprint-start! sprint-start (conn))
             (println "Done.")))))
     (doseq [i (:stop work-issues)]
       (let [sprint-stop (sprint-stop* i)]
@@ -538,9 +521,9 @@
           (do
             (println (format "Stopping a sprint, per issue #%s..."
                              (:number i)) "...")
-            (github/comment-on-issue (github-conn) i "Stopping the sprint...")
+            (github/comment-on-issue (conn) i "Stopping the sprint...")
             (println (format "Processing %s issues from sprint plan..."
                              (count (:issues sprint-stop))))
-            (let [outf (do-sprint-stop! sprint-stop (github-conn))]
+            (let [outf (do-sprint-stop! sprint-stop (conn))]
               (println (format "Did a Sprint Stop (#%s) by %s" (:number i) assignee))
               (println "Wrote issues/retro:" outf))))))))

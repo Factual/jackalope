@@ -4,21 +4,9 @@
             [clojure.data.json :as json]))
 
 ;
-; Wherever functions take a repo-id, it's the underlying 
-; 1800123
-; (it's *not* the human readable repo name)
+; Wherever functions take a repo-id, it's the numerical id for the Github repo,
+; e.g. 1800123 (*not* the human readable repo name)
 ;
-
-
-(defn conn
-  "Returns a connection object (simple hash-map) constructed from the specified
-   token and repo-id. token must be a valid ZenHub token. repo-id must be the
-   underlying github repo id, e.g. 1800123 (NOT the human readable repo name)."
-  [token repo-id]
-  (assert (> (count token) 40) "You've specified a short ZenHub token value")
-  (assert (< (count (str repo-id)) 40) "You've specified a crazy long repo-id")
-  {:token token
-   :repo-id repo-id})
 
 (defn keep-nums [issues inums]
   (filter 
@@ -49,10 +37,10 @@
 
    Throws an ExceptionInfo (a subclass of RuntimeException) if the server's
    response status is anything other than 200."
-  [{:keys [token repo-id]}]
+  [{:keys [zenhub-token repo-id]}]
   (let [url (format "https://api.zenhub.io/p1/repositories/%s/board" repo-id)
         {:keys [status headers body error] :as resp}
-        @(http/get url {:headers {"X-Authentication-Token" token}})
+        @(http/get url {:headers {"X-Authentication-Token" zenhub-token}})
         data (json/read-str body)]
     (if (= status 200)
       data
@@ -65,10 +53,10 @@
 
    Throws an ExceptionInfo (a subclass of RuntimeException) if the server's
    response status is anything other than 200."
-  [{:keys [token repo-id]} inum]
+  [{:keys [zenhub-token repo-id]} inum]
   (let [url (format "https://api.zenhub.io/p1/repositories/%s/issues/%s" repo-id inum)
         {:keys [status headers body error] :as resp}
-        @(http/get url {:headers {"X-Authentication-Token" token}})
+        @(http/get url {:headers {"X-Authentication-Token" zenhub-token}})
         data (json/read-str body)]
     (if (= status 200)
       data
@@ -97,10 +85,10 @@
 
    Throws an ExceptionInfo (a subclass of RuntimeException) if the server's
    response status is anything other than 200."
-  [{:keys [token repo-id]}]
+  [{:keys [zenhub-token repo-id]}]
   (let [url (format "https://api.zenhub.io/p1/repositories/%s/epics" repo-id)
         {:keys [status headers body error] :as resp}
-        @(http/get url {:headers {"X-Authentication-Token" token}})
+        @(http/get url {:headers {"X-Authentication-Token" zenhub-token}})
         data (json/read-str body)]
     (if (= status 200)
       data
@@ -130,7 +118,6 @@
       10102 {:board-name 'To Do', :estimate 5},
       10328 {:board-name 'To Do', :estimate 2}}"
   [pipelines]
-
   (apply merge (map is->m pipelines)))
 
 (defn est-if-late-add [conn]

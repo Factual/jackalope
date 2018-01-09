@@ -35,7 +35,7 @@
        (rand-int 1000)))
 
 (defn create-test-issue [ms-num]
-  (github/create-issue (github-conn) (rand-title) {:milestone ms-num}))
+  (github/create-issue (conn) (rand-title) {:milestone ms-num}))
 
 (defn create-test-issues
   "Creates n new issues, assigned to the milestone ms-num.
@@ -78,7 +78,7 @@
    (B) an issue planned as 'no'; should be moved to milestone B
    (C) an issue planned as 'maybe'; should stay in milestone A and get maybe label"
   []
-  (github! CONF)
+  (connect! CONF)
 
   ;; Create issues A, B, and C and create a plan for them
   (let [[a b c] (create-test-issues 3 MILESTONE-A)
@@ -89,7 +89,7 @@
     
     ;; Lookup all three issues and verify state
     (let [[a b c]
-          (github/fetch-issues-by-nums (github-conn) (map :number [a b c]))]
+          (github/fetch-issues-by-nums (conn) (map :number [a b c]))]
 
       ;; Issue A -- still in milestone A, no 'maybe' label
       (is (= MILESTONE-A (get-in a [:milestone :number])))
@@ -115,15 +115,15 @@
    (C) an issue that gets closed.
        should get no maybe change and should not get swept forward"
   []
-  (github! CONF)
+  (connect! CONF)
 
   ;; Create issues A, B, and C. Then get actions
   (let [[a b c] (create-test-issues 3 MILESTONE-A)
         ;; add maybe label to issue a
-        ra (first (github/add-a-label (github-conn) (:number a) :maybe))
+        ra (first (github/add-a-label (conn) (:number a) :maybe))
         _  (assert (= "maybe" (:name ra)) (str "(:name ra) unexpectedly: " (:name ra)))
         ;; close issue c
-        rc (github/edit-issue (github-conn) {:number (:number c)
+        rc (github/edit-issue (conn) {:number (:number c)
                                              :state :closed})
         _  (assert (:closed_at rc))
         ;; TODO: explicitly test closed-ahead functionality
@@ -146,7 +146,7 @@
 
     ;; Lookup all three issues and verify state
     (let [[a b c]
-          (github/fetch-issues-by-nums (github-conn) (map :number [a b c]))]
+          (github/fetch-issues-by-nums (conn) (map :number [a b c]))]
 
       ;; Issue A -- unmaybe'd and swept forward
       (is (not (issues/has-maybe-label? a)))
@@ -176,7 +176,7 @@
    {:issues [the 3 test issues, A, B, C]
     :plan   [the plan structure]}"
   []
-  (github! CONF)
+  (connect! CONF)
 
   ;; Create issues A, B, and C and create a plan for them
   (let [[a b c] (create-test-issues 3 MILESTONE-A)
