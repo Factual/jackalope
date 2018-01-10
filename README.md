@@ -113,13 +113,13 @@ This section illustrates use of Jackalope on the REPL.
 
 ### Connect
 
-You establish a connection by calling the `github!` function in the `core` namespace. You can supply no arguments, in which case it will attempt to read credentials from `github-prod.edn` in the current working directory. Or you can provide a file path as an argument, in which case it'll attempt to read credentials from that file. E.g.:
+You establish a connection by calling the `connect!` function in the `core` namespace. You can supply no arguments, in which case it will attempt to read credentials from `github-prod.edn` in the current working directory. Or you can provide a file path as an argument, in which case it'll attempt to read credentials from that file. E.g.:
 
 ```clojure
-(github! "/Users/aaroncrow/workspace/jackalope/github-test.edn")
+(connect! "/Users/aaroncrow/workspace/jackalope/github-test.edn")
 ```
 
-When the credentials file is found and read, `github!` will return `true` (but this does not guarantee that the credentials are correct).
+When the credentials file is found and read, `connect!` will return `true` (but this does not guarantee that the credentials are correct).
 
 
 ### Example REPLE session -- generate a sprint start description
@@ -132,7 +132,7 @@ The following example assumes:
 ```bash
 $ lein repl
 jackalope.main=> (in-ns 'jackalope.core)
-jackalope.core=> (github! "github-test.edn")
+jackalope.core=> (connect! "github-test.edn")
 jackalope.core=> (def ISSUE (first (:start (find-work "ava-v"))))
 jackalope.core=> (def START (sprint-start* ISSUE))
 jackalope.core=> (keys START)
