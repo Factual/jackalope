@@ -39,7 +39,6 @@
         ""
         "Actions:"
         "  check-sprint    Perform a check for sprint related work; do the work"
-        "  loop            Run the main work loop, forever"
         ""
         "Please refer to the manual page for more information."]
        (clojure.string/join \newline)))
@@ -52,15 +51,8 @@
   (assert assignee "You must specify an assignee, with -a or --assignee")
   (core/check-sprint assignee preview))
 
-(defn watch [{:keys [assignee] :as opts}]
-  (println "watching...")
-  (check-sprint opts)
-  (Thread/sleep 5000)
-  (recur opts))
-
 (def COMMAND-FNS 
-  {"check-sprint" check-sprint
-   "watch" watch})
+  {"check-sprint" check-sprint})
 
 (defn run [cmd opts]
   (assert (contains? COMMAND-FNS cmd) "You must specify a valid action command")
