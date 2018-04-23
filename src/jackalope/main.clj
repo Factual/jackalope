@@ -21,7 +21,7 @@
    ["-c" "--conf CONF" "Configuration file (github auth)"
     :default core/DEFAULT-CONF
     ;; side effect; caches github auth
-    :parse-fn #(core/github! %)]
+    :parse-fn #(core/connect! %)]
    ["-a" "--assignee ASSIGNEE"]
    ["-h" "--help" "Show this help message"]])
 
