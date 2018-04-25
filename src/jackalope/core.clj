@@ -305,6 +305,7 @@
          p))
      plan)))
 
+;TODOL remove when no longer used(?)
 (defn without
   "Removes the indicated issue from coll, assuming that coll is a collection of
    hash-maps each with a :number key. This allows us to leave open work issues
@@ -312,6 +313,20 @@
  [{:keys [number]} coll]
   (remove #(= number (:number %)) coll))
 
+(defn sprint-start**
+  "Returns a description of the sprint start for the specified milestone."
+  [ms-num]
+  (let [ms (github/fetch-milestone (conn) ms-num)
+        ms-num (:number ms)
+        ms-title (:title ms)
+        plan (+titles (fetch-plan-from-zenhub ms-num))]
+    {:ms-num ms-num
+     :ms-title ms-title
+     :plan plan
+     :plan-tbl (plan->github-markdown-table plan)
+     :plan-str (plan->ms-desc plan)}))
+
+;TODO: remove in favour of sprint-start**
 (defn sprint-start*
   "Returns a description of a sprint start, using the specified issue as the 
    sprint start request. The issue must already be assigned a valid milestone."
@@ -332,10 +347,14 @@
    {:number 101
     :milestone {:number 3 :title "My favourite milestone!"}}))
 
+(defn create-sprint-issue 
+  [ms-num title]
+  (github/create-issue (conn) title {:milestone ms-num}))
+
 (defn do-sprint-start!
   "Given a sprint start request, performs the sprint start.
 
-   Assums the current milestone is ms-num.
+   Assumes the current milestone is ms-num.
    Assumes the next milestone already exists, as ms-num + 1.
 
    Performs these steps:
@@ -343,9 +362,15 @@
    * Moves 'no' items to next milestone
    * Writes a comment to the issue, showing the plan as a table
    * Sets the Milestone's description to contain the plan data
-   * Closes the issue"
-  [{:keys [plan ms-num ms-title plan-tbl plan-str issue]} conn]
-  (let [ms-curr ms-num
+   * Closes the issue
+
+   Returns the github issue associated with the sprint start."
+  ;; TODO! remove issue param and always create
+  ;; TODO! assert that ms-next exists, early.
+  [{:keys [plan ms-num ms-title plan-tbl plan-str issue]}]
+  (let [conn (conn)
+        issue (or issue (create-sprint-issue ms-num "start sprint")) ;;TODO! always create new issue
+        ms-curr ms-num
         ms-next (inc ms-curr)
         actions (actions-for plan ms-curr ms-next)
         comment (format
@@ -363,7 +388,8 @@
      conn 
      issue
      "Saved the plan. The sprint has started.")
-    (github/close-issue conn issue)))
+    (github/close-issue conn issue)
+    issue))
 
 (defn plan-from-ms [ms]
   (-> ms
@@ -395,6 +421,26 @@
 (defn union-i [a b]
   (map first (vals (group-by :number (concat a b)))))
 
+(defn sprint-stop**
+  "Returns a description of the sprint stop for the specified milestone."
+  [ms-curr]
+  (let [ms (github/fetch-milestone (conn) ms-curr)
+        ms-next (inc ms-curr)
+        ms-title (:title ms)
+        plan    (ms-desc->plan (:description ms))
+        cd-next (closed-in ms-next)
+        issues  (union-i (fetch-all-issues ms-curr plan) cd-next)
+        issues  (with-zenhub (mark-late-adds plan issues))
+        actions (sweep-milestone ms-curr ms-next cd-next)
+        retro   (retro/retrospective plan issues)]
+    {:ms-num  ms-curr
+     :ms-title ms-title
+     :issues  issues
+     :actions actions
+     :plan    plan
+     :retro   retro}))
+
+;TODO: remove in favour of sprint-stop**
 (defn sprint-stop* [issue]
   (let [ms (:milestone issue)
         ms-curr (:number ms)
@@ -414,7 +460,7 @@
      :plan    plan
      :retro   retro}))
 
-(defn do-reporting [{:keys [issue plan issues ms-num]} conn]
+(defn do-reporting [{:keys [plan issues ms-num]} issue conn]
   (let [retro (retro/retrospective plan issues)
         ris (retro/as-issues retro)
         shouts (retro/shout-outs ris)
@@ -441,19 +487,25 @@
    * Writes an issues/retro file in the form of issues records
 
    Returns the filename for the issues/retro file."
-  [{:keys [issue actions plan issues ms-num] :as stop} conn]
-  (github/comment-on-issue conn issue
-                           (format
-                            "Sweeping issues (%s actions)... retrospective report on the way..."
-                            (count actions)))
-  (sweep! actions)
-  (let [outf (do-reporting stop conn)]
-    (github/comment-on-issue 
-     conn 
-     issue
-     "Swept issues and filed retrospective report. The sprint is stopped.")
-    (github/close-issue conn issue)
-    outf))
+  ;; TODO! remove issue param and always create
+  ;; TODO! assert that ms-next exists, early.
+  [{:keys [issue actions plan issues ms-num] :as stop}]
+  (let [conn (conn)
+        ;;TODO! always create new issue
+        issue (or issue (create-sprint-issue "stop sprint" ms-num))]
+    (github/comment-on-issue conn issue
+                             (format
+                              "Sweeping issues (%s actions)... retrospective report on the way..."
+                              (count actions)))
+
+    (sweep! actions)
+    (let [outf (do-reporting stop issue conn)]
+      (github/comment-on-issue 
+       conn 
+       issue
+       "Swept issues and filed retrospective report. The sprint is stopped.")
+      (github/close-issue conn issue)
+      outf)))
 
 (defn find-work
   "Queries GitHub for assigned work that should be handled.
@@ -471,18 +523,21 @@
                                                            assignee "stop"))]
      {:stop stops})))
 
+;TODO! remove in favour of main's
 (defn preview-sprint-start [{:keys [plan ms-num ms-title plan-tbl plan-str issue]}]
   (println "------ Sprint start preview ------")
   (println (format "Issue #%s" (:number issue)))
   (println (format "Milestone #%s, '%s'" ms-num ms-title))
   (println plan-tbl))
 
+;TODO! remove in favour of main's
 (defn print-outcomes [retro]
   (doseq [[outcome issues] retro] 
     (println "---" (name outcome) "---")
     (doseq [{:keys [number assignee title]} issues]
       (println number (:login assignee) title))))
 
+;TODO! remove in favour of main's
 (defn preview-sprint-stop [{:keys [issue actions plan issues]}]
   (println "------ Sprint stop preview ------")
   (println (format "Issue #%s" (:number issue)))
@@ -499,6 +554,7 @@
     (doseq [a actions]
       (println a))))
 
+;TODO! remove once new start/stop CLI commands are done
 (defn check-sprint [assignee preview?]
   (println "Checking sprint for" assignee)
   (let [work-issues (find-work assignee)]
@@ -512,7 +568,7 @@
             (github/comment-on-issue (conn) i "Starting the sprint...")
             (println (format "Processing plan with %s decisions..."
                              (count (:plan sprint-start))))
-            (do-sprint-start! sprint-start (conn))
+            (do-sprint-start! sprint-start)
             (println "Done.")))))
     (doseq [i (:stop work-issues)]
       (let [sprint-stop (sprint-stop* i)]

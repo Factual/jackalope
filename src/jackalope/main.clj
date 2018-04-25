@@ -8,6 +8,7 @@
 ;
 (ns jackalope.main
   (:require [jackalope.core :as core]
+            [jackalope.retrospective :as retro]
             [clojure.tools.cli :refer [parse-opts]])
   (:gen-class))
 
@@ -23,6 +24,7 @@
     ;; side effect; caches github auth
     :parse-fn #(core/connect! %)]
    ["-a" "--assignee ASSIGNEE"]
+   ["-m" "--milestone MILESTONE"]  ;; TODO: use parser library to inforce integer
    ["-h" "--help" "Show this help message"]])
 
 (defn exit [status msg]
@@ -38,6 +40,8 @@
         options-summary
         ""
         "Actions:"
+        "  start-sprint    Perform a sprint start for the specified milestone"
+        "  stop-sprint    Perform a sprint stop for the specified milestone"
         "  check-sprint    Perform a check for sprint related work; do the work"
         ""
         "Please refer to the manual page for more information."]
@@ -48,11 +52,69 @@
        (clojure.string/join \newline errors)))
 
 (defn check-sprint [{:keys [assignee preview]}]
-  (assert assignee "You must specify an assignee, with -a or --assignee")
+  (assert assignee "You must specify an assignee with -a or --assignee")
   (core/check-sprint assignee preview))
 
+(defn preview-sprint-start [{:keys [ms-num ms-title plan-tbl]}]
+  (println "------ Sprint start preview ------")
+  (println (format "Milestone #%s, '%s'" ms-num ms-title))
+  (println plan-tbl))
+
+(defn print-outcomes [retro]
+  (doseq [[outcome issues] retro] 
+    (println "---" (name outcome) "---")
+    (doseq [{:keys [number assignee title]} issues]
+      (println number (:login assignee) title))))
+
+(defn preview-sprint-stop [{:keys [actions plan issues]}]
+  (println "------ Sprint stop preview ------")
+  (let [retro (retro/retrospective plan issues)
+        ris (retro/as-issues retro)
+        shouts (retro/shout-outs ris)]
+    (println "Outcomes:")
+    (print-outcomes retro)
+    (println "Shout outs:")
+    (clojure.pprint/pprint shouts)
+    (println "Actions:")
+    (doseq [a actions]
+      (println a))))
+
+(defn start-sprint
+  "Performs all actions to start a sprint, including:
+   * Creates a new issue to represent the sprint start
+   * Reads the sprint plan from ZenHub boards
+   * Sweeps tickets based on the plan"
+  [{:keys [preview milestone]}]
+  (assert milestone
+          "You must specify a valid milestone number with -m or --milestone")
+  (let [ss (core/sprint-start** milestone)]
+    (if preview
+      (preview-sprint-start ss)
+      (do
+        (core/do-sprint-start! ss)
+        (println "Done.")))))
+
+(defn stop-sprint
+  "Performs all actions to stop a sprint, including:
+   * Creates a new issue to represent the sprint stop
+   * Reads the sprint plan from the milestone description
+   * Generates a sprint report and includes in the issue
+   * Sweeps undone tickets to the next milestone"
+  [{:keys [preview milestone]}]
+  (assert milestone
+          "You must specify a valid milestone number with -m or --milestone")
+  (let [ms-curr (Integer/parseInt milestone) ;;TODO: rely on CLI parser instead for integer
+        ss (core/sprint-stop** ms-curr)]
+    (if preview
+      (preview-sprint-stop ss)
+      (do
+        (core/do-sprint-stop! ss)
+        (println "Done.")))))
+
 (def COMMAND-FNS 
-  {"check-sprint" check-sprint})
+  {"check-sprint" check-sprint
+   "start-sprint" start-sprint
+   "stop-sprint" stop-sprint})
 
 (defn run [cmd opts]
   (assert (contains? COMMAND-FNS cmd) "You must specify a valid action command")
