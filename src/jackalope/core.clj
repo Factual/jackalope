@@ -580,6 +580,6 @@
             (github/comment-on-issue (conn) i "Stopping the sprint...")
             (println (format "Processing %s issues from sprint plan..."
                              (count (:issues sprint-stop))))
-            (let [outf (do-sprint-stop! sprint-stop (conn))]
+            (let [outf (do-sprint-stop! sprint-stop)]
               (println (format "Did a Sprint Stop (#%s) by %s" (:number i) assignee))
               (println "Wrote issues/retro:" outf))))))))
