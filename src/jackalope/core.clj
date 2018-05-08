@@ -499,7 +499,7 @@
   [{:keys [issue actions plan issues ms-num] :as stop}]
   (let [conn (conn)
         ;;TODO! always create new issue
-        issue (or issue (create-sprint-issue "stop sprint" ms-num))]
+        issue (or issue (create-sprint-issue ms-num "stop sprint"))]
     (github/comment-on-issue conn issue
                              (format
                               "Sweeping issues (%s actions)... retrospective report on the way..."
