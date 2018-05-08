@@ -129,13 +129,16 @@
     "Closed" :yes ;; TODO! this results in assigning the next milestone, even tho it's DONE
     :inscrutable))
 
-(defn pipeline->plan-recs [{:strs [name issues]}]
-(for [i issues]
-    (merge 
-     {:number (get i "issue_number")
-      :do? (zh-do? name)}
-     (when-let [e (get-in i ["estimate" "value"])]
-       {:estimate e}))))
+(defn pipeline->plan-recs [inum->i]
+  (fn [{:strs [name issues]}]
+    (for [i issues]
+      (let [number (get i "issue_number")]
+        (merge 
+         {:number number
+          :assignee (issues/assignee (get inum->i number))
+          :do? (zh-do? name)}
+         (when-let [e (get-in i ["estimate" "value"])]
+           {:estimate e}))))))
 
 (defn fetch-pipelines
   "Returns the ZenHub pipeline data for issue numbers in the specified milestone"
@@ -144,23 +147,27 @@
         issue-nums (map :number (github/fetch-issues-by-milestone conn ms-num))]
     (zenhub/fetch-pipelines conn issue-nums)))
 
+(defn as-inum->i [issues]
+  (reduce (fn [m i]
+            (assoc m (:number i) i))
+          {}
+          issues))
+
 (defn as-plan
-  "Takes ZenHub boards data and converts to a concise plan structure; returns a
-   collection of hash-maps where each hash-map represents an issue and its
-   decision in the plan.
+  "Fetches GitHub and ZenHub boards data for the specified milestone and returns
+   a concise plan structure represented as a collection of hash-maps where each
+   hash-map represents an issue and its decision in the plan.
 
    Example hash-map in the collection:
    {:number 6279,
     :estimate 3,
+    :assignee 'dirtyvagabond',
     :title 'Add support for feature X',
     :do? :no}"
-;;TODO!! we don't get the title here; merge in elsewhere and filter out unwanted issues
-  [pipelines]
-  (mapcat pipeline->plan-recs pipelines))
-
-;; TODO: should much of this live in the zenhub namespace (law of Demeter?)
-(defn fetch-plan-from-zenhub [ms-num]
-  (as-plan (fetch-pipelines ms-num)))
+  [ms-num]
+  (let [issues (github/fetch-issues-by-milestone (conn) ms-num)
+        pipes (zenhub/fetch-pipelines (conn) (map :number issues))]
+    (mapcat (pipeline->plan-recs (as-inum->i issues)) pipes)))
 
 ;;
 ;; Main use cases
@@ -319,7 +326,7 @@
   (let [ms (github/fetch-milestone (conn) ms-num)
         ms-num (:number ms)
         ms-title (:title ms)
-        plan (+titles (fetch-plan-from-zenhub ms-num))]
+        plan (+titles (as-plan ms-num))]
     {:ms-num ms-num
      :ms-title ms-title
      :plan plan
@@ -334,7 +341,7 @@
   (let [ms (:milestone issue)
         ms-num (:number ms)
         ms-title (:title ms)
-        plan (without issue (+titles (fetch-plan-from-zenhub ms-num)))]
+        plan (without issue (+titles (as-plan ms-num)))]
     {:issue issue
      :ms-num ms-num
      :ms-title ms-title

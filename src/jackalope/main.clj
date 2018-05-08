@@ -60,11 +60,12 @@
   (println (format "Milestone #%s, '%s'" ms-num ms-title))
   (println plan-tbl))
 
+;TODO: duplicative of code in retro namespace. DRY it up.
 (defn print-outcomes [retro]
   (doseq [[outcome issues] retro] 
     (println "---" (name outcome) "---")
-    (doseq [{:keys [number assignee title]} issues]
-      (println number (:login assignee) title))))
+    (doseq [{:keys [number orig-assignee title]} issues]
+      (println number orig-assignee title))))
 
 (defn preview-sprint-stop [{:keys [actions plan issues]}]
   (println "------ Sprint stop preview ------")

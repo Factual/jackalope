@@ -70,11 +70,15 @@
     (assoc i :estimate e)
     i))
 
+(defn +orig-assignee [i ndx]
+  (assoc i :orig-assignee (get-in ndx [(:number i) :assignee])))
+
 (defn- mark [ndx]
   (fn [i]
     (-> i
         (+do? ndx)
         (+est ndx)
+        (+orig-assignee ndx)
         +outcome
         +downgraded?)))
 
@@ -104,10 +108,10 @@
 
 (defn- ->md-table [issues]
   (md/table ["Issue" "Estimate" "Assignee" "Title"]
-            ;; one issue per row, sorted by assignee
-            (for [{:keys [number estimate title] :as i}
-                  (sort-by is/login issues)]
-              [(str "#" number) estimate (is/login i) title])))
+            ;; one issue per row, sorted by original assignee
+            (for [{:keys [number estimate title orig-assignee] :as i}
+                  (sort-by :orig-assignee issues)]
+              [(str "#" number) estimate orig-assignee title])))
 
 (defn as-markdowns
   "Returns the retrospective report as a hash-map keyed by outcome. Each value
