@@ -64,8 +64,8 @@
 (defn print-outcomes [retro]
   (doseq [[outcome issues] retro] 
     (println "---" (name outcome) "---")
-    (doseq [{:keys [number orig-assignee title]} issues]
-      (println number orig-assignee title))))
+    (doseq [{:keys [number owner title]} (sort-by :owner issues)]
+      (println number owner title))))
 
 (defn preview-sprint-stop [{:keys [actions plan issues]}]
   (println "------ Sprint stop preview ------")
